@@ -1,30 +1,22 @@
 import argparse
 import code
-from dataclasses import dataclass
 import json
 import os
 import sys
-from typing import Callable, Literal, Optional, TypeVar, Type, Generic, Any
+from typing import Callable, Literal, Optional, TypeVar, Type, Any
 
 import cv2
 from dotenv import load_dotenv
-import easyocr
 from google import genai
 from google.genai import types
 from imgcat import imgcat
 from mbforbes_python_utils import write
 import numpy as np
 from pydantic import BaseModel
-import pytesseract
 import yt_dlp
 
 # Create a generic type variable for the Pydantic model
 T = TypeVar("T", bound=BaseModel)
-
-
-# heavy, make once
-# reader = easyocr.Reader(["en"])
-
 
 # gemini client
 load_dotenv()
@@ -33,25 +25,27 @@ if not api_key:
     raise RuntimeError("GOOGLE_GEMINI_API_KEY not found in environment.")
 client = genai.Client(api_key=api_key)
 
+# gross mutable global sorryyy
 RUNNING_COST = 0.0
 
 
-@dataclass
-class Rectangle:
-    """Represents a rectangular region in a 1920 x 1080 image."""
+class Rectangle(BaseModel):
+    """Represents a rectangular region in a 1920 x 1080 image, incl. name and OCR function."""
 
     name: str
+    """Key in the intermediate results dict."""
     x: int
     y: int
     w: int
     h: int
     ocr_fn: Callable[[np.ndarray], Any]
+    """Function from crop to value in the intermediate results dict."""
 
 
 AgeNumeral = Literal["I", "II", "III", "IV"]
 AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
 
-# constituent classes for FrameResult
+# constituent classes for FrameResult:
 
 
 class Resources(BaseModel):
@@ -126,8 +120,10 @@ def display(frame_bgr: cv2.typing.MatLike) -> None:
     imgcat(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
 
 
-def download_video(url, output_dir="./videos"):
-    """Download a YouTube video and return its local path."""
+def download_video(
+    url: str, output_dir: str = "./videos"
+) -> tuple[Optional[str], Optional[dict[str, Any]]]:
+    """Download a YouTube video and return its (local path, metadata dict)."""
     os.makedirs(output_dir, exist_ok=True)
 
     ydl_opts = {
@@ -187,112 +183,6 @@ def extract_frame(video_path, position=0.5):
     return frame, frame_number
 
 
-# def clean_age_text(image):
-#     """Custom post-processor for age text in AoE2."""
-#     # Convert to grayscale
-#     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#
-#     # Apply thresholding to isolate text
-#     _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-#
-#     # OCR with custom config for better accuracy with game fonts
-#     text = str(pytesseract.image_to_string(thresh, config="--psm 7")).strip()
-#
-#     # Clean up common OCR errors in age names
-#     if "castle" in text.lower():
-#         return "Castle Age"
-#     elif "imperial" in text.lower() or "imper" in text.lower():
-#         return "Imperial Age"
-#     elif "feudal" in text.lower() or "feud" in text.lower():
-#         return "Feudal Age"
-#     elif "dark" in text.lower():
-#         return "Dark Age"
-#     else:
-#         return text
-
-
-# def clean_number_text(image):
-#     """Custom post-processor for numeric values in AoE2."""
-#     # Convert to grayscale
-#     # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-#     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-
-#     # Apply thresholding
-#     _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY)
-
-#     # OCR with config optimized for digits
-#     text = str(
-#         pytesseract.image_to_string(
-#             thresh, config="--psm 7 -c tessedit_char_whitelist=0123456789"
-#         )
-#     ).strip()
-
-#     # Try to convert to integer, return original if not possible
-#     try:
-#         return str(int(text))
-#     except ValueError:
-#         return text
-
-
-# def clean_number_text(image):
-#     """OCR post-processing tuned to avoid blocky artifact hallucinations."""
-#     # Convert to grayscale
-#     gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-#
-#     # Light upscale with smooth interpolation
-#     # gray = cv2.resize(gray, None, fx=1., fy=1.5, interpolation=cv2.INTER_CUBIC)
-#
-#     # Very light blur
-#     gray = cv2.GaussianBlur(gray, (3, 3), 0)
-#
-#     # Dynamic threshold (Otsu)
-#     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-#
-#     # **Tiny blur after threshold to smooth jagged edges**
-#     thresh = cv2.GaussianBlur(thresh, (1, 1), 0)
-#
-#     # Optional: Tiny morphology if needed (comment out if over-smoothing)
-#     # kernel = np.ones((2, 2), np.uint8)
-#     # thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
-#
-#     # Show processed image
-#     display(thresh)
-#
-#     # OCR config
-#     text = str(
-#         pytesseract.image_to_string(
-#             thresh, config="--psm 7 -c tessedit_char_whitelist=0123456789"
-#         )
-#     ).strip()
-#
-#     try:
-#         return str(int(text))
-#     except ValueError:
-#         return text
-
-# def ocr_easyocr(crop: np.ndarray):
-#     # Apply OCR
-#     # raw_text = str(pytesseract.image_to_string(crop)).strip()
-#     gray = cv2.cvtColor(crop, cv2.COLOR_RGB2GRAY)
-#     gray = cv2.resize(gray, None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-#     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-#     display(thresh)  # , height=(rect.h))
-#     res = reader.readtext(thresh)
-#     print("Res len:", len(res))
-#     # code.interact(local=dict(globals(), **locals()))
-#     _bb, raw_text, _conf = res[0]
-#     print(f"OCR results: {raw_text}")
-
-#     # Apply custom post-processing if specified
-#     processed_text = raw_text
-#     # if rect.post_process:
-#     #     # For post-processing, also show the preprocessed image
-#     #     processed_text = rect.post_process(crop)
-#     #     print(f"Processed OCR: {processed_text}")
-
-#     return processed_text
-
-
 def gemini_cost(
     usage_metadata: Optional[types.GenerateContentResponseUsageMetadata],
     model_version: Optional[str],
@@ -317,17 +207,13 @@ def gemini_cost(
         # NOTE: Other models may use thinking tokens, which are charged differently.
     }
     if usage_metadata is None or model_version is None:
-        raise ValueError(
-            "Got None for one of usage, model:", usage_metadata, model_version
-        )
+        raise ValueError("Got None for one of usage, model:", usage_metadata, model_version)
 
     if model_version not in pricing:
         raise ValueError(f"Pricing for model '{model_version}' not found.")
 
     input_tokens = (
-        usage_metadata.prompt_token_count
-        if usage_metadata.prompt_token_count is not None
-        else 0
+        usage_metadata.prompt_token_count if usage_metadata.prompt_token_count is not None else 0
     )
     output_tokens = (
         usage_metadata.candidates_token_count
@@ -498,9 +384,7 @@ def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str
     return result.player, result.civilization
 
 
-def analyze_frame(
-    frame: cv2.typing.MatLike, rectangles: list[Rectangle]
-) -> FrameResult:
+def analyze_frame(frame: cv2.typing.MatLike, rectangles: list[Rectangle]) -> FrameResult:
     """Extract text from defined regions in a frame and show results."""
     # Display the full frame first
     display(frame)  # , height=100)
@@ -597,48 +481,37 @@ def analyze_frame(
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="AoE2 Frame OCR Development Tool")
-    parser.add_argument(
-        "--video", required=True, help="YouTube video URL or local video path"
-    )
+    parser.add_argument("--video", required=True, help="YouTube video URL or local video path")
     parser.add_argument(
         "--position", type=float, default=0.5, help="Position in video (0.0 to 1.0)"
     )
-    parser.add_argument(
-        "--output", default="./output", help="Output directory for results"
-    )
+    parser.add_argument("--output", default="./output", help="Output directory for results")
     args = parser.parse_args()
 
     # Define regions of interest specific to AoE2
     rectangles: list[Rectangle] = [
-        Rectangle("wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle("wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle("food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle("food_villagers", x=107, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle("gold", x=247, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle("gold_villagers", x=206, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle("stone", x=346, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle("stone_villagers", x=305, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle("population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
-        Rectangle("villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
-        Rectangle("idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
+        Rectangle(name="wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+        Rectangle(name="wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+        Rectangle(name="food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+        Rectangle(name="food_villagers", x=107, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+        Rectangle(name="gold", x=247, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+        Rectangle(name="gold_villagers", x=206, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+        Rectangle(name="stone", x=346, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+        Rectangle(name="stone_villagers", x=305, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+        Rectangle(name="population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
+        Rectangle(name="villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
+        Rectangle(name="idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
+        Rectangle(name="age_numeral", x=577, y=10, w=33, h=32, ocr_fn=ocr_gemini_age_numeral),
+        Rectangle(name="age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
+        Rectangle(name="home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
+        Rectangle(name="desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
+        Rectangle(name="wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+        Rectangle(name="losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+        Rectangle(name="away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opponents
+        Rectangle(name="metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
+        Rectangle(name="gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
         Rectangle(
-            "age_numeral",
-            x=577,
-            y=10,
-            w=33,
-            h=32,
-            ocr_fn=ocr_gemini_age_numeral,
-        ),
-        Rectangle("age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
-        Rectangle("home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
-        Rectangle("desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
-        Rectangle("wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
-        Rectangle("losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
-        Rectangle("away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opp.
-        Rectangle("metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
-        Rectangle("gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
-        Rectangle(
-            "top_number_player_score",
+            name="top_number_player_score",
             x=1544,
             y=836,
             w=319,
@@ -646,15 +519,10 @@ def main():
             ocr_fn=ocr_gemini_number_player_score,
         ),
         Rectangle(
-            "top_player_age_numeral",
-            x=1885,
-            y=839,
-            w=26,
-            h=24,
-            ocr_fn=ocr_gemini_age_numeral,
+            name="top_player_age_numeral", x=1885, y=839, w=26, h=24, ocr_fn=ocr_gemini_age_numeral
         ),
         Rectangle(
-            "bottom_number_player_score",
+            name="bottom_number_player_score",
             x=1544,
             y=862,
             w=319,
@@ -662,7 +530,7 @@ def main():
             ocr_fn=ocr_gemini_number_player_score,
         ),
         Rectangle(
-            "bottom_player_age_numeral",
+            name="bottom_player_age_numeral",
             x=1885,
             y=862,
             w=26,
@@ -670,12 +538,7 @@ def main():
             ocr_fn=ocr_gemini_age_numeral,
         ),
         Rectangle(
-            "selected_player_civ",
-            x=599,
-            y=918,
-            w=250,
-            h=26,
-            ocr_fn=ocr_gemini_player_civ,
+            name="selected_player_civ", x=599, y=918, w=250, h=26, ocr_fn=ocr_gemini_player_civ
         ),
     ]
 
@@ -685,7 +548,7 @@ def main():
     if args.video.startswith(("http://", "https://", "www.")):
         # Download the video if it's a URL
         video_path, video_info = download_video(args.video)
-        if not video_path:
+        if video_path is None:
             print("Error: Failed to download video. Exiting.")
             sys.exit(1)
 
@@ -711,6 +574,7 @@ def main():
         print("Skipping: Frame results exist at", output_file)
     elif frame.shape[0] != 1080 or frame.shape[1] != 1920 or frame.shape[2] != 3:
         print("Error: Frame isn't (1080, 1920, 3), instead", frame.shape)
+        sys.exit(1)
     else:
         # Analyze the frame, maybe display results as we go, save
         results = analyze_frame(frame, rectangles)
