@@ -1,0 +1,46 @@
+{
+  "wood": 13,
+  "wood_villagers": 13,
+  "food": 127,
+  "food_villagers": 26,
+  "gold": 1006,
+  "gold_villagers": 13,
+  "stone": 116,
+  "stone_villagers": 15,
+  "population": [
+    93,
+    130
+  ],
+  "villagers": 79,
+  "idles": 6,
+  "age": "Castle Age",
+  "home": "Hera",
+  "desc": "Ranked",
+  "wins": 7,
+  "losses": 1,
+  "away": "Opponents",
+  "metadate": "10 April 2025",
+  "gametime": [
+    0,
+    38,
+    42
+  ],
+  "top_number_player_score": [
+    2,
+    "TAG_MbL_",
+    5656,
+    5656
+  ],
+  "top_player_age_numeral": "III",
+  "bottom_number_player_score": [
+    1,
+    "GL.Hera",
+    5449,
+    5449
+  ],
+  "bottom_player_age_numeral": "III",
+  "selected_player_civ": [
+    null,
+    null
+  ]
+}

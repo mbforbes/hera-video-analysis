@@ -9,7 +9,7 @@ plan
    -  [x] whoops way more lol
 -  [x] make robust to bad frames (beg/end of video)
 -  [x] save metadata
--  [ ] track cost
+-  [x] track cost
 -  [ ] ensure frame shape expected
 -  [ ] clean up code
 -  [ ] save as known data structure if possible

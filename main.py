@@ -33,6 +33,8 @@ if not api_key:
     raise RuntimeError("GOOGLE_GEMINI_API_KEY not found in environment.")
 client = genai.Client(api_key=api_key)
 
+RUNNING_COST = 0.0
+
 
 @dataclass
 class Rectangle:
@@ -229,6 +231,56 @@ def extract_frame(video_path, position=0.5):
 #     return processed_text
 
 
+def gemini_cost(
+    usage_metadata: Optional[types.GenerateContentResponseUsageMetadata],
+    model_version: Optional[str],
+) -> float:
+    """
+    Calculates the total cost of a Gemini API call based on usage metadata and model pricing.
+
+    Args:
+        usage_metadata: The dictionary containing token usage information.
+        model_name: The name of the Gemini model used. Defaults to "gemini-2.0-flash-lite-001".
+
+    Returns:
+        The total cost of the API call in USD as a double.
+    """
+    # Pricing per 1 million tokens in USD
+    # https://ai.google.dev/gemini-api/docs/pricing
+    pricing = {
+        "gemini-2.0-flash-lite-001": {
+            "input": 0.075,
+            "output": 0.30,
+        },
+        # NOTE: Other models may use thinking tokens, which are charged differently.
+    }
+    if usage_metadata is None or model_version is None:
+        raise ValueError(
+            "Got None for one of usage, model:", usage_metadata, model_version
+        )
+
+    if model_version not in pricing:
+        raise ValueError(f"Pricing for model '{model_version}' not found.")
+
+    input_tokens = (
+        usage_metadata.prompt_token_count
+        if usage_metadata.prompt_token_count is not None
+        else 0
+    )
+    output_tokens = (
+        usage_metadata.candidates_token_count
+        if usage_metadata.candidates_token_count is not None
+        else 0
+    )
+
+    input_cost = (input_tokens / 1_000_000) * pricing[model_version]["input"]
+    output_cost = (output_tokens / 1_000_000) * pricing[model_version]["output"]
+
+    total_cost = input_cost + output_cost
+
+    return total_cost
+
+
 def ocr_gemini(crop: np.ndarray, prompt: str, model_class: Type[T]) -> T:
     """
     Generic OCR function using Gemini to extract structured data from images.
@@ -255,6 +307,9 @@ def ocr_gemini(crop: np.ndarray, prompt: str, model_class: Type[T]) -> T:
             response_schema=model_class,
         ),
     )
+
+    global RUNNING_COST
+    RUNNING_COST += gemini_cost(response.usage_metadata, response.model_version)
 
     # Parse the response using the provided model
     return model_class.model_validate_json(
@@ -423,6 +478,8 @@ def analyze_frame(
 
         results[rect.name] = detected
         print()
+
+    print(f"Total cost so far: ${RUNNING_COST:.8f}")
 
     return results
 
