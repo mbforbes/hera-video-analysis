@@ -38,7 +38,7 @@ RUNNING_COST = 0.0
 
 @dataclass
 class Rectangle:
-    """Represents a rectangular region in an image."""
+    """Represents a rectangular region in a 1920 x 1080 image."""
 
     name: str
     x: int
@@ -48,16 +48,78 @@ class Rectangle:
     ocr_fn: Callable[[np.ndarray], Any]
 
 
-@dataclass
-class ProportionRectangle:
-    """Represents a proportion (in 0 - 1) rectangular region in an image."""
+AgeNumeral = Literal["I", "II", "III", "IV"]
+AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
 
-    name: str
-    xP: int
-    yP: int
-    wP: int
-    hP: int
-    ocr_fn: Callable[[np.ndarray], Any]
+# constituent classes for FrameResult
+
+
+class Resources(BaseModel):
+    wood: Optional[int]
+    food: Optional[int]
+    gold: Optional[int]
+    stone: Optional[int]
+
+
+class Villagers(BaseModel):
+    wood: Optional[int]
+    food: Optional[int]
+    gold: Optional[int]
+    stone: Optional[int]
+    total: Optional[int]
+    idle: Optional[int]
+
+
+class Population(BaseModel):
+    current: Optional[int]
+    maximum: Optional[int]
+
+
+class Age(BaseModel):
+    numeral: Optional[AgeNumeral]
+    """Shows the current age"""
+    text: Optional[AgeText]
+    """Shows the current age, OR if advancing, shows the next age."""
+
+
+class FrameMetadata(BaseModel):
+    home: Optional[str]
+    away: Optional[str]
+    desc: Optional[str]
+    metadate: Optional[str]
+    wins: Optional[int]
+    losses: Optional[int]
+
+
+class Gametime(BaseModel):
+    hours: Optional[int]
+    minutes: Optional[int]
+    seconds: Optional[int]
+
+
+class PlayerInfo(BaseModel):
+    number: Optional[int]
+    name: Optional[str]
+    score_individual: Optional[int]
+    score_team: Optional[int]
+    age_numeral: Optional[AgeNumeral]
+
+
+class SelectedInfo(BaseModel):
+    player_name: Optional[str]
+    civilization: Optional[str]
+
+
+class FrameResult(BaseModel):
+    resources: Resources
+    villagers: Villagers
+    population: Population
+    age: Age
+    metadata: FrameMetadata
+    gametime: Gametime
+    top_player: PlayerInfo
+    bottom_player: PlayerInfo
+    selected_info: SelectedInfo
 
 
 def display(frame_bgr: cv2.typing.MatLike) -> None:
@@ -344,9 +406,6 @@ def ocr_gemini_pop(crop: np.ndarray) -> tuple[Optional[int], Optional[int]]:
     return result.numerator, result.denominator
 
 
-AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
-
-
 class OcrAgeResult(BaseModel):
     age: Optional[AgeText]
 
@@ -358,9 +417,6 @@ def ocr_gemini_age(crop: np.ndarray) -> Optional[AgeText]:
         model_class=OcrAgeResult,
     )
     return result.age
-
-
-AgeNumeral = Literal["I", "II", "III", "IV"]
 
 
 class OcrAgeNumeralResult(BaseModel):
@@ -443,13 +499,13 @@ def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str
 
 
 def analyze_frame(
-    frame: cv2.typing.MatLike, rectangles: list[Rectangle | ProportionRectangle]
-):
+    frame: cv2.typing.MatLike, rectangles: list[Rectangle]
+) -> FrameResult:
     """Extract text from defined regions in a frame and show results."""
     # Display the full frame first
     display(frame)  # , height=100)
 
-    results = {}
+    results: dict[str, Any] = {}
 
     for r in rectangles:
         if isinstance(r, Rectangle):
@@ -481,7 +537,61 @@ def analyze_frame(
 
     print(f"Total cost so far: ${RUNNING_COST:.8f}")
 
-    return results
+    return FrameResult(
+        resources=Resources(
+            wood=results["wood"],
+            food=results["food"],
+            gold=results["gold"],
+            stone=results["stone"],
+        ),
+        villagers=Villagers(
+            wood=results["wood_villagers"],
+            food=results["food_villagers"],
+            gold=results["gold_villagers"],
+            stone=results["stone_villagers"],
+            total=results["villagers"],
+            idle=results["idles"],
+        ),
+        population=Population(
+            current=results["population"][0],
+            maximum=results["population"][1],
+        ),
+        age=Age(
+            numeral=results["age_numeral"],
+            text=results["age_text"],
+        ),
+        metadata=FrameMetadata(
+            home=results["home"],
+            away=results["away"],
+            desc=results["desc"],
+            metadate=results["metadate"],
+            wins=results["wins"],
+            losses=results["losses"],
+        ),
+        gametime=Gametime(
+            hours=results["gametime"][0],
+            minutes=results["gametime"][1],
+            seconds=results["gametime"][2],
+        ),
+        top_player=PlayerInfo(
+            number=results["top_number_player_score"][0],
+            name=results["top_number_player_score"][1],
+            score_individual=results["top_number_player_score"][2],
+            score_team=results["top_number_player_score"][3],
+            age_numeral=results["top_player_age_numeral"],
+        ),
+        bottom_player=PlayerInfo(
+            number=results["bottom_number_player_score"][0],
+            name=results["bottom_number_player_score"][1],
+            score_individual=results["bottom_number_player_score"][2],
+            score_team=results["bottom_number_player_score"][3],
+            age_numeral=results["bottom_player_age_numeral"],
+        ),
+        selected_info=SelectedInfo(
+            player_name=results["selected_player_civ"][0],
+            civilization=results["selected_player_civ"][1],
+        ),
+    )
 
 
 def main():
@@ -499,7 +609,7 @@ def main():
     args = parser.parse_args()
 
     # Define regions of interest specific to AoE2
-    rectangles: list[Rectangle | ProportionRectangle] = [
+    rectangles: list[Rectangle] = [
         Rectangle("wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
         Rectangle("wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
         Rectangle("food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
@@ -511,7 +621,15 @@ def main():
         Rectangle("population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
         Rectangle("villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
         Rectangle("idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
-        Rectangle("age", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
+        Rectangle(
+            "age_numeral",
+            x=577,
+            y=10,
+            w=33,
+            h=32,
+            ocr_fn=ocr_gemini_age_numeral,
+        ),
+        Rectangle("age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
         Rectangle("home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
         Rectangle("desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
         Rectangle("wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
@@ -594,13 +712,9 @@ def main():
     elif frame.shape[0] != 1080 or frame.shape[1] != 1920 or frame.shape[2] != 3:
         print("Error: Frame isn't (1080, 1920, 3), instead", frame.shape)
     else:
-        # Analyze the frame and display results
+        # Analyze the frame, maybe display results as we go, save
         results = analyze_frame(frame, rectangles)
-
-        # Save the results
-        with open(output_file, "w") as f:
-            json.dump(results, f, indent=2)
-        print(f"Results saved to {output_file}")
+        write(output_file, results.model_dump_json())
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ plan
 -  [x] make robust to bad frames (beg/end of video)
 -  [x] save metadata
 -  [x] track cost
--  [ ] ensure frame shape expected
+-  [x] ensure frame shape expected
 -  [ ] clean up code
 -  [ ] save as known data structure if possible
 -  [ ] use frame's cached result if it exists
