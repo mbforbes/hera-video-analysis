@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from imgcat import imgcat
-from mbforbes_python_utils import write
+from mbforbes_python_utils import read, write
 import numpy as np
 from pydantic import BaseModel
 import yt_dlp
@@ -44,6 +44,13 @@ class Rectangle(BaseModel):
 
 AgeNumeral = Literal["I", "II", "III", "IV"]
 AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
+
+ORDERED_AGE_TEXT: list[AgeText] = [
+    "Dark Age",
+    "Feudal Age",
+    "Castle Age",
+    "Imperial Age",
+]
 
 # constituent classes for FrameResult:
 
@@ -152,7 +159,7 @@ def download_video(
             return None, info
 
 
-def extract_frame(video_path, position=0.5):
+def extract_frame_from_position(video_path: str, position=0.5):
     """Extract a frame at the specified position (0.0 to 1.0) in the video."""
     cap = cv2.VideoCapture(video_path)
 
@@ -181,6 +188,26 @@ def extract_frame(video_path, position=0.5):
     print(f"Video info: {frame_count} frames, {fps:.2f} fps, {duration:.2f}s duration")
 
     return frame, frame_number
+
+
+def get_n_frames(video_path: str):
+    cap = cv2.VideoCapture(video_path)
+    return int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+
+def get_frame(video_path: str, frame_number: int):
+    cap = cv2.VideoCapture(video_path)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
+    ret, frame = cap.read()
+    cap.release()
+
+    if not ret:
+        print(f"Error: Failed to extract frame {frame_number} for video {video_path}")
+        sys.exit(1)
+    if frame.shape[0] != 1080 or frame.shape[1] != 1920 or frame.shape[2] != 3:
+        print("Error: Frame isn't (1080, 1920, 3), instead", frame.shape)
+        sys.exit(1)
+    return frame
 
 
 def gemini_cost(
@@ -384,42 +411,103 @@ def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str
     return result.player, result.civilization
 
 
-def analyze_frame(frame: cv2.typing.MatLike, rectangles: list[Rectangle]) -> FrameResult:
+RECTANGLES: list[Rectangle] = [
+    Rectangle(name="wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+    Rectangle(name="wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+    Rectangle(name="food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+    Rectangle(name="food_villagers", x=107, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+    Rectangle(name="gold", x=247, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+    Rectangle(name="gold_villagers", x=206, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+    Rectangle(name="stone", x=346, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
+    Rectangle(name="stone_villagers", x=305, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
+    Rectangle(name="population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
+    Rectangle(name="villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
+    Rectangle(name="idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
+    Rectangle(name="age_numeral", x=577, y=10, w=33, h=32, ocr_fn=ocr_gemini_age_numeral),
+    Rectangle(name="age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
+    Rectangle(name="home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
+    Rectangle(name="desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
+    Rectangle(name="wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+    Rectangle(name="losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+    Rectangle(name="away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opponents
+    Rectangle(name="metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
+    Rectangle(name="gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
+    Rectangle(
+        name="top_number_player_score",
+        x=1544,
+        y=836,
+        w=319,
+        h=27,
+        ocr_fn=ocr_gemini_number_player_score,
+    ),
+    Rectangle(
+        name="top_player_age_numeral", x=1885, y=839, w=26, h=24, ocr_fn=ocr_gemini_age_numeral
+    ),
+    Rectangle(
+        name="bottom_number_player_score",
+        x=1544,
+        y=862,
+        w=319,
+        h=27,
+        ocr_fn=ocr_gemini_number_player_score,
+    ),
+    Rectangle(
+        name="bottom_player_age_numeral",
+        x=1885,
+        y=862,
+        w=26,
+        h=26,
+        ocr_fn=ocr_gemini_age_numeral,
+    ),
+    Rectangle(name="selected_player_civ", x=599, y=918, w=250, h=26, ocr_fn=ocr_gemini_player_civ),
+]
+
+
+def get_frame_result(out_dir: str, video_path: str, frame_number: int):
+    print("Getting FrameResult for frame", frame_number)
+    output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
+
+    # return results if they already exist
+    if os.path.exists(output_file):
+        print("Skipping: Frame results exist at", output_file)
+        return FrameResult.model_validate_json(read(output_file))
+
+    # else, do OCR and cache result before returning
+    results = analyze_frame(get_frame(video_path, frame_number))
+    write(output_file, results.model_dump_json())
+    return results
+
+
+def analyze_frame(
+    frame: cv2.typing.MatLike,
+    display_frame: bool = True,
+    display_crops: bool = False,
+    print_results: bool = True,
+    print_cost: bool = True,
+) -> FrameResult:
     """Extract text from defined regions in a frame and show results."""
     # Display the full frame first
-    display(frame)  # , height=100)
+    if display_frame:
+        display(frame)
 
     results: dict[str, Any] = {}
 
-    for r in rectangles:
-        if isinstance(r, Rectangle):
-            rect = r
-        else:
-            h, w, _ = frame.shape
-            rect = Rectangle(
-                x=r.xP * w,
-                y=r.yP * h,
-                w=r.wP * w,
-                h=r.hP * w,
-                name=r.name,
-                ocr_fn=r.ocr_fn,
-            )
-
+    for rect in RECTANGLES:
         # Crop the image according to the rectangle
         crop = frame[rect.y : rect.y + rect.h, rect.x : rect.x + rect.w]
-
-        # Display the original crop
-        print("Performing OCR for", rect.name)
-        display(crop)  # , height=(rect.h))
-
-        # detected = ocr_easyocr(crop)
+        if print_results:
+            print("Performing OCR for", rect.name)
+        if display_crops:
+            display(crop)  # , height=(rect.h))
         detected = rect.ocr_fn(crop)
-        print("Detected:", detected)
+        if print_results:
+            print("Detected:", detected)
+            print()
 
         results[rect.name] = detected
-        print()
 
-    print(f"Total cost so far: ${RUNNING_COST:.8f}")
+    if print_cost:
+        print(f"Total cost so far: ${RUNNING_COST:.8f}")
 
     return FrameResult(
         resources=Resources(
@@ -478,69 +566,62 @@ def analyze_frame(frame: cv2.typing.MatLike, rectangles: list[Rectangle]) -> Fra
     )
 
 
+def _binary_search_age_click(
+    out_dir: str, video_path: str, age: AgeText, start_frame: int, end_frame: int
+) -> FrameResult:
+    """NOTE: Could speed up & reduce cost dramatically by only doing OCR on age text, then doing
+    full OCR once desired frame found."""
+    print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
+    age_idx = ORDERED_AGE_TEXT.index(age)
+
+    if start_frame > end_frame:
+        print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
+        sys.exit(1)
+    elif start_frame == end_frame or start_frame + 1 == end_frame:
+        # shockingly, 1 and 2 frame remaining logic the same
+        fr = get_frame_result(out_dir, video_path, start_frame)
+        if fr.age.text == age:
+            return fr
+        else:
+            next_fr = get_frame_result(out_dir, video_path, start_frame + 1)
+            if next_fr.age.text != age:
+                print(
+                    f"Error: binary search failed at start=end={start_frame}, cur frame age = {fr.age.text}, next frame age = {next_fr.age.text}"
+                )
+                sys.exit(1)
+            return next_fr
+    else:
+        mid_frame = (start_frame + end_frame) // 2  # round down
+        fr = get_frame_result(out_dir, video_path, mid_frame)
+        # TODO: heuristic should incorporate position in video! right now assuming None for text =
+        # before video starts (i.e., before 'dark age')
+        mid_age_idx = -1 if fr.age.text is None else ORDERED_AGE_TEXT.index(fr.age.text)
+        if mid_age_idx >= age_idx:
+            return _binary_search_age_click(out_dir, video_path, age, start_frame, mid_frame - 1)
+        else:
+            return _binary_search_age_click(out_dir, video_path, age, mid_frame + 1, end_frame)
+
+
+def binary_search_age_click(out_dir: str, video_path: str, age: AgeText):
+    n_frames = get_n_frames(video_path)
+
+    age_index = ORDERED_AGE_TEXT.index(age)
+    if age_index == 0:
+        print("Finding start of first age unsupported")
+        sys.exit(1)
+
+    return _binary_search_age_click(out_dir, video_path, age, 0, n_frames - 1)
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="AoE2 Frame OCR Development Tool")
     parser.add_argument("--video", required=True, help="YouTube video URL or local video path")
-    parser.add_argument(
-        "--position", type=float, default=0.5, help="Position in video (0.0 to 1.0)"
-    )
+    # parser.add_argument(
+    #     "--position", type=float, default=0.5, help="Position in video (0.0 to 1.0)"
+    # )
     parser.add_argument("--output", default="./output", help="Output directory for results")
     args = parser.parse_args()
-
-    # Define regions of interest specific to AoE2
-    rectangles: list[Rectangle] = [
-        Rectangle(name="wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle(name="wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle(name="food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle(name="food_villagers", x=107, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle(name="gold", x=247, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle(name="gold_villagers", x=206, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle(name="stone", x=346, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
-        Rectangle(name="stone_villagers", x=305, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        Rectangle(name="population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
-        Rectangle(name="villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
-        Rectangle(name="idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
-        Rectangle(name="age_numeral", x=577, y=10, w=33, h=32, ocr_fn=ocr_gemini_age_numeral),
-        Rectangle(name="age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
-        Rectangle(name="home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
-        Rectangle(name="desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
-        Rectangle(name="wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
-        Rectangle(name="losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
-        Rectangle(name="away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opponents
-        Rectangle(name="metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
-        Rectangle(name="gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
-        Rectangle(
-            name="top_number_player_score",
-            x=1544,
-            y=836,
-            w=319,
-            h=27,
-            ocr_fn=ocr_gemini_number_player_score,
-        ),
-        Rectangle(
-            name="top_player_age_numeral", x=1885, y=839, w=26, h=24, ocr_fn=ocr_gemini_age_numeral
-        ),
-        Rectangle(
-            name="bottom_number_player_score",
-            x=1544,
-            y=862,
-            w=319,
-            h=27,
-            ocr_fn=ocr_gemini_number_player_score,
-        ),
-        Rectangle(
-            name="bottom_player_age_numeral",
-            x=1885,
-            y=862,
-            w=26,
-            h=26,
-            ocr_fn=ocr_gemini_age_numeral,
-        ),
-        Rectangle(
-            name="selected_player_civ", x=599, y=918, w=250, h=26, ocr_fn=ocr_gemini_player_civ
-        ),
-    ]
 
     # Check if input is a URL or local file
     video_path = args.video
@@ -563,22 +644,9 @@ def main():
         write(metadata_path, json.dumps(video_info))
 
     # Extract a frame at the specified position
-    frame, frame_number = extract_frame(video_path, args.position)
-    if frame is None:
-        print("Failed to extract frame. Exiting.")
-        sys.exit(1)
-
-    # check whether results exist
-    output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
-    if os.path.exists(output_file):
-        print("Skipping: Frame results exist at", output_file)
-    elif frame.shape[0] != 1080 or frame.shape[1] != 1920 or frame.shape[2] != 3:
-        print("Error: Frame isn't (1080, 1920, 3), instead", frame.shape)
-        sys.exit(1)
-    else:
-        # Analyze the frame, maybe display results as we go, save
-        results = analyze_frame(frame, rectangles)
-        write(output_file, results.model_dump_json())
+    feudal_click = binary_search_age_click(out_dir, video_path, "Feudal Age")
+    print("Got result for feudal click:")
+    print(feudal_click)
 
 
 if __name__ == "__main__":
