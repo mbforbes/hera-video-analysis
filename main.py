@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import json
 import os
 import sys
-from typing import Callable, Literal, Optional, TypeVar, Type, Generic
+from typing import Callable, Literal, Optional, TypeVar, Type, Generic, Any
 
 import cv2
 from dotenv import load_dotenv
@@ -42,7 +42,7 @@ class Rectangle:
     y: int
     w: int
     h: int
-    ocr_fn: Callable[[np.ndarray], str | int]
+    ocr_fn: Callable[[np.ndarray], Any]
 
 
 @dataclass
@@ -54,7 +54,7 @@ class ProportionRectangle:
     yP: int
     wP: int
     hP: int
-    ocr_fn: Callable[[np.ndarray], str | int]
+    ocr_fn: Callable[[np.ndarray], Any]
 
 
 def display(frame_bgr: cv2.typing.MatLike) -> None:
@@ -262,16 +262,30 @@ def ocr_gemini(crop: np.ndarray, prompt: str, model_class: Type[T]) -> T:
 
 
 class OcrNumberResult(BaseModel):
-    number: int
+    number: Optional[int]
 
 
-def ocr_gemini_int(crop: np.ndarray) -> int:
+def ocr_gemini_int(crop: np.ndarray) -> Optional[int]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the number from this image.",
+        prompt="Extract the number from this image. Only if no number is visible, return None.",
         model_class=OcrNumberResult,
     )
     return result.number
+
+
+class OcrPopulationResult(BaseModel):
+    numerator: int
+    denominator: int
+
+
+def ocr_gemini_pop(crop: np.ndarray) -> tuple[int, int]:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract in-order the two numbers separated by a slash in this image, i.e., numerator/denominator.",
+        model_class=OcrPopulationResult,
+    )
+    return result.numerator, result.denominator
 
 
 class OcrAgeResult(BaseModel):
@@ -285,6 +299,77 @@ def ocr_gemini_age(crop: np.ndarray) -> str:
         model_class=OcrAgeResult,
     )
     return result.age
+
+
+class OcrAgeNumeralResult(BaseModel):
+    roman_numeral: Literal["I", "II", "III", "IV"]
+
+
+def ocr_gemini_age_numeral(crop: np.ndarray) -> str:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract the text from this image. It will be a roman numeral on top of a crest background. It must exactly match one of the roman numerals from 1 through 4: I, II, III, IV. Pick the closest match.",
+        model_class=OcrAgeNumeralResult,
+    )
+    return result.roman_numeral
+
+
+class OcrTextResult(BaseModel):
+    text: str
+
+
+def ocr_gemini_text(crop: np.ndarray) -> str:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract the text from this image",
+        model_class=OcrTextResult,
+    )
+    return result.text
+
+
+class OcrTimeResult(BaseModel):
+    hh: str
+    mm: str
+    ss: str
+
+
+def ocr_gemini_time(crop: np.ndarray) -> tuple[int, int, int]:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract the time displayed in this image. Is formatted hh:mm:ss",
+        model_class=OcrTimeResult,
+    )
+    return int(result.hh), int(result.mm), int(result.ss)
+
+
+class OcrNumberPlayerScoreResult(BaseModel):
+    number: int
+    player: str
+    numerator: int
+    denominator: int
+
+
+def ocr_gemini_number_player_score(crop: np.ndarray) -> tuple[int, str, int, int]:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract the number and then player name displayed in this image. From left to right, the narrow image will have a series of icons: first a clock, then a globe. Ignore those. Then, there will be a number inside a square between 1 and 8. Extract that number. Then, there will be a player's name, like 'GL.Hera' or 'TAG_MbL_'. Extract that player name. There, there will be a colon ':', ignore that. Finally, there will be two identical numbers formatted like numerator/denominator. Extract each of these identical numbers.",
+        model_class=OcrNumberPlayerScoreResult,
+    )
+    return result.number, result.player, result.numerator, result.denominator
+
+
+class OcrPlayerCivResult(BaseModel):
+    player: Optional[str]
+    civilization: Optional[str]
+
+
+def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str]]:
+    result = ocr_gemini(
+        crop=crop,
+        prompt="Extract the player name and civilization name displayed in this image. If present, it will be formatted like 'Player (Civilization)'. For example, 'GL.Hera (Britons)' or 'TAG_MbL_ (Armenians)'. If text is not present in this format, instead return None for each.",
+        model_class=OcrPlayerCivResult,
+    )
+    return result.player, result.civilization
 
 
 def analyze_frame(
@@ -343,8 +428,6 @@ def main():
 
     # Define regions of interest specific to AoE2
     rectangles: list[Rectangle | ProportionRectangle] = [
-        Rectangle("age", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
-        Rectangle("villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
         Rectangle("wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
         Rectangle("wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
         Rectangle("food", x=148, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
@@ -353,18 +436,69 @@ def main():
         Rectangle("gold_villagers", x=206, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
         Rectangle("stone", x=346, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
         Rectangle("stone_villagers", x=305, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
-        # Rectangle("score", 700, 20, 80, 30, post_process=clean_number_text),
-        # Rectangle("game_time", 400, 20, 100, 30),
+        Rectangle("population", x=446, y=15, w=75, h=27, ocr_fn=ocr_gemini_pop),
+        Rectangle("villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
+        Rectangle("idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
+        Rectangle("age", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
+        Rectangle("home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
+        Rectangle("desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
+        Rectangle("wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+        Rectangle("losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
+        Rectangle("away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opp.
+        Rectangle("metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
+        Rectangle("gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
+        Rectangle(
+            "top_number_player_score",
+            x=1544,
+            y=836,
+            w=319,
+            h=27,
+            ocr_fn=ocr_gemini_number_player_score,
+        ),
+        Rectangle(
+            "top_player_age_numeral",
+            x=1885,
+            y=839,
+            w=26,
+            h=24,
+            ocr_fn=ocr_gemini_age_numeral,
+        ),
+        Rectangle(
+            "bottom_number_player_score",
+            x=1544,
+            y=862,
+            w=319,
+            h=27,
+            ocr_fn=ocr_gemini_number_player_score,
+        ),
+        Rectangle(
+            "bottom_player_age_numeral",
+            x=1885,
+            y=862,
+            w=26,
+            h=26,
+            ocr_fn=ocr_gemini_age_numeral,
+        ),
+        Rectangle(
+            "selected_player_civ",
+            x=599,
+            y=918,
+            w=250,
+            h=26,
+            ocr_fn=ocr_gemini_player_civ,
+        ),
     ]
 
     # Check if input is a URL or local file
     video_path = args.video
     if args.video.startswith(("http://", "https://", "www.")):
         # Download the video if it's a URL
-        video_path, _ = download_video(args.video)
+        video_path, video_info = download_video(args.video)
         if not video_path:
             print("Failed to download video. Exiting.")
             sys.exit(1)
+
+    # code.interact(local=dict(globals(), **locals()))
 
     # Extract a frame at the specified position
     frame, frame_number = extract_frame(video_path, args.position)
@@ -372,20 +506,23 @@ def main():
         print("Failed to extract frame. Exiting.")
         sys.exit(1)
 
-    # > frame.shape
-    # (1080, 1920, 3)
-
-    # Analyze the frame and display results
-    results = analyze_frame(frame, rectangles)
-
-    # Save the results
+    # check whether results exist
     video_uid = ".".join(os.path.basename(video_path).split(".")[:1])
     out_dir = os.path.join(args.output, video_uid)
     os.makedirs(out_dir, exist_ok=True)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
-    with open(output_file, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"Results saved to {output_file}")
+    if os.path.exists(output_file):
+        print("Skipping: Frame results exist at", output_file)
+    elif frame.shape[0] != 1080 or frame.shape[1] != 1920 or frame.shape[2] != 3:
+        print("Error: Frame isn't (1080, 1920, 3), instead", frame.shape)
+    else:
+        # Analyze the frame and display results
+        results = analyze_frame(frame, rectangles)
+
+        # Save the results
+        with open(output_file, "w") as f:
+            json.dump(results, f, indent=2)
+        print(f"Results saved to {output_file}")
 
 
 if __name__ == "__main__":

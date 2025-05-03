@@ -1,6 +1,14 @@
 plan
 
--  [ ] extract pop, idles, time, date, maybe players / score
+-  [ ] extract
+   -  [x] pop
+   -  [x] idles
+   -  [x] time
+   -  [x] date
+   -  [x] maybe players / score
+   -  [x] whoops way more lol
+-  [ ] make robust to bad frames (beg/end of video)
+-  [ ] ensure frame shape expected
 -  [ ] clean up code
 -  [ ] save as known data structure if possible
 -  [ ] use frame's cached result if it exists

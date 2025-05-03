@@ -1,19 +1,19 @@
 {
-  "wood": 205,
-  "wood_villagers": 16,
-  "food": 75,
-  "food_villagers": 16,
-  "gold": 249,
-  "gold_villagers": 11,
+  "wood": 128,
+  "wood_villagers": 12,
+  "food": 93,
+  "food_villagers": 13,
+  "gold": 288,
+  "gold_villagers": 3,
   "stone": 75,
   "stone_villagers": 0,
   "population": [
-    66,
-    80
+    34,
+    40
   ],
-  "villagers": 44,
-  "idles": 1,
-  "age": "Castle Age",
+  "villagers": 29,
+  "idles": 0,
+  "age": "Feudal Age",
   "home": "Hera",
   "desc": "Ranked",
   "wins": 7,
@@ -22,25 +22,25 @@
   "metadate": "10 April 2025",
   "gametime": [
     0,
-    27,
-    38
+    13,
+    47
   ],
   "top_number_player_score": [
     1,
     "GL.Hera",
-    3583,
-    3583
+    1359,
+    1359
   ],
-  "top_player_age_numeral": "III",
+  "top_player_age_numeral": "II",
   "bottom_number_player_score": [
-    2,
+    7,
     "TAG_MbL_",
-    3389,
-    3389
+    1289,
+    1289
   ],
-  "bottom_player_age_numeral": "III",
+  "bottom_player_age_numeral": "II",
   "selected_player_civ": [
-    "GL.Hera",
-    "Celts"
+    null,
+    null
   ]
 }

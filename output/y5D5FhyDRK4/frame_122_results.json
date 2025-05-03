@@ -1,0 +1,46 @@
+{
+  "wood": 123,
+  "wood_villagers": 123,
+  "food": 0,
+  "food_villagers": 123,
+  "gold": 0,
+  "gold_villagers": 123,
+  "stone": 123,
+  "stone_villagers": 0,
+  "population": [
+    0,
+    0
+  ],
+  "villagers": 0,
+  "idles": 0,
+  "age": "Dark Age",
+  "home": "Hera",
+  "desc": "Ranked",
+  "wins": 7,
+  "losses": 1,
+  "away": "Opponents",
+  "metadate": "10 April 2025",
+  "gametime": [
+    0,
+    0,
+    0
+  ],
+  "top_number_player_score": [
+    0,
+    "GL.Hera",
+    0,
+    0
+  ],
+  "top_player_age_numeral": "I",
+  "bottom_number_player_score": [
+    0,
+    "Record Game",
+    0,
+    0
+  ],
+  "bottom_player_age_numeral": "I",
+  "selected_player_civ": [
+    null,
+    null
+  ]
+}
