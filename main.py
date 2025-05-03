@@ -12,6 +12,7 @@ import easyocr
 from google import genai
 from google.genai import types
 from imgcat import imgcat
+from mbforbes_python_utils import write
 import numpy as np
 from pydantic import BaseModel
 import pytesseract
@@ -505,14 +506,23 @@ def main():
 
     # Check if input is a URL or local file
     video_path = args.video
+    video_info = None
     if args.video.startswith(("http://", "https://", "www.")):
         # Download the video if it's a URL
         video_path, video_info = download_video(args.video)
         if not video_path:
-            print("Failed to download video. Exiting.")
+            print("Error: Failed to download video. Exiting.")
             sys.exit(1)
 
-    # code.interact(local=dict(globals(), **locals()))
+    # Locate out dir
+    video_uid = ".".join(os.path.basename(video_path).split(".")[:1])
+    out_dir = os.path.join(args.output, video_uid)
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Save metadata if it was retrieved and we don't have it saved.
+    metadata_path = os.path.join(out_dir, "metadata.json")
+    if video_info is not None and not os.path.exists(metadata_path):
+        write(metadata_path, json.dumps(video_info))
 
     # Extract a frame at the specified position
     frame, frame_number = extract_frame(video_path, args.position)
@@ -521,9 +531,6 @@ def main():
         sys.exit(1)
 
     # check whether results exist
-    video_uid = ".".join(os.path.basename(video_path).split(".")[:1])
-    out_dir = os.path.join(args.output, video_uid)
-    os.makedirs(out_dir, exist_ok=True)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
     if os.path.exists(output_file):
         print("Skipping: Frame results exist at", output_file)

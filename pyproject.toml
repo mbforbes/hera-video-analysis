@@ -8,6 +8,7 @@ dependencies = [
     "easyocr>=1.7.2",
     "google-genai>=1.12.1",
     "imgcat>=0.6.0",
+    "mbforbes-python-utils>=0.5.0",
     "opencv-python>=4.11.0.86",
     "pydantic>=2.11.3",
     "pytesseract>=0.3.13",

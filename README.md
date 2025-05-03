@@ -1,13 +1,15 @@
 plan
 
--  [ ] extract
+-  [x] extract
    -  [x] pop
    -  [x] idles
    -  [x] time
    -  [x] date
    -  [x] maybe players / score
    -  [x] whoops way more lol
--  [ ] make robust to bad frames (beg/end of video)
+-  [x] make robust to bad frames (beg/end of video)
+-  [x] save metadata
+-  [ ] track cost
 -  [ ] ensure frame shape expected
 -  [ ] clean up code
 -  [ ] save as known data structure if possible
