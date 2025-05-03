@@ -275,84 +275,98 @@ def ocr_gemini_int(crop: np.ndarray) -> Optional[int]:
 
 
 class OcrPopulationResult(BaseModel):
-    numerator: int
-    denominator: int
+    numerator: Optional[int]
+    denominator: Optional[int]
 
 
-def ocr_gemini_pop(crop: np.ndarray) -> tuple[int, int]:
+def ocr_gemini_pop(crop: np.ndarray) -> tuple[Optional[int], Optional[int]]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract in-order the two numbers separated by a slash in this image, i.e., numerator/denominator.",
+        prompt="Extract in-order the two numbers separated by a slash in this image, i.e., numerator/denominator. Only if no numbers are visible, return None for each.",
         model_class=OcrPopulationResult,
     )
     return result.numerator, result.denominator
 
 
+AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
+
+
 class OcrAgeResult(BaseModel):
-    age: Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
+    age: Optional[AgeText]
 
 
-def ocr_gemini_age(crop: np.ndarray) -> str:
+def ocr_gemini_age(crop: np.ndarray) -> Optional[AgeText]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the text from this image. It must exactly match one of the four options: Dark Age, Feudal Age, Castle Age, Imperial Age. Pick the closest match.",
+        prompt="Extract the text from this image. It must exactly match one of the four options: Dark Age, Feudal Age, Castle Age, Imperial Age. Pick the closest match. Only if there is no text that matches any option, return None.",
         model_class=OcrAgeResult,
     )
     return result.age
 
 
+AgeNumeral = Literal["I", "II", "III", "IV"]
+
+
 class OcrAgeNumeralResult(BaseModel):
-    roman_numeral: Literal["I", "II", "III", "IV"]
+    roman_numeral: Optional[AgeNumeral]
 
 
-def ocr_gemini_age_numeral(crop: np.ndarray) -> str:
+def ocr_gemini_age_numeral(crop: np.ndarray) -> Optional[AgeNumeral]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the text from this image. It will be a roman numeral on top of a crest background. It must exactly match one of the roman numerals from 1 through 4: I, II, III, IV. Pick the closest match.",
+        prompt="Extract the text from this image. It will be a roman numeral on top of a crest background. It must exactly match one of the roman numerals from 1 through 4: I, II, III, IV. Pick the closest match. Only if there is no text, return None.",
         model_class=OcrAgeNumeralResult,
     )
     return result.roman_numeral
 
 
 class OcrTextResult(BaseModel):
-    text: str
+    text: Optional[str]
 
 
-def ocr_gemini_text(crop: np.ndarray) -> str:
+def ocr_gemini_text(crop: np.ndarray) -> Optional[str]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the text from this image",
+        prompt="Extract the text from this image. Only if there is no text, return None.",
         model_class=OcrTextResult,
     )
     return result.text
 
 
 class OcrTimeResult(BaseModel):
-    hh: str
-    mm: str
-    ss: str
+    hh: Optional[str]
+    mm: Optional[str]
+    ss: Optional[str]
 
 
-def ocr_gemini_time(crop: np.ndarray) -> tuple[int, int, int]:
+def ocr_gemini_time(
+    crop: np.ndarray,
+) -> tuple[None, None, None] | tuple[int, int, int]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the time displayed in this image. Is formatted hh:mm:ss",
+        prompt="Extract the time displayed in this image. Is formatted hh:mm:ss. Only if there is no text, return None for each value.",
         model_class=OcrTimeResult,
     )
-    return int(result.hh), int(result.mm), int(result.ss)
+    return (
+        (None, None, None)
+        if result.hh is None or result.mm is None or result.ss is None
+        else (int(result.hh), int(result.mm), int(result.ss))
+    )
 
 
 class OcrNumberPlayerScoreResult(BaseModel):
-    number: int
-    player: str
-    numerator: int
-    denominator: int
+    number: Optional[int]
+    player: Optional[str]
+    numerator: Optional[int]
+    denominator: Optional[int]
 
 
-def ocr_gemini_number_player_score(crop: np.ndarray) -> tuple[int, str, int, int]:
+def ocr_gemini_number_player_score(
+    crop: np.ndarray,
+) -> tuple[Optional[int], Optional[str], Optional[int], Optional[int]]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the number and then player name displayed in this image. From left to right, the narrow image will have a series of icons: first a clock, then a globe. Ignore those. Then, there will be a number inside a square between 1 and 8. Extract that number. Then, there will be a player's name, like 'GL.Hera' or 'TAG_MbL_'. Extract that player name. There, there will be a colon ':', ignore that. Finally, there will be two identical numbers formatted like numerator/denominator. Extract each of these identical numbers.",
+        prompt="Extract the number and then player name displayed in this image. From left to right, the narrow image will have a series of icons: first a clock, then a globe. Ignore those. Then, there will be a number inside a square between 1 and 8. Extract that number. Then, there will be a player's name, like 'GL.Hera' or 'TAG_MbL_'. Extract that player name. There, there will be a colon ':', ignore that. Finally, there will be two identical numbers formatted like numerator/denominator. Extract each of these identical numbers as numerator and denominator. Only if there is no text formatted like this, instead return None for each component.",
         model_class=OcrNumberPlayerScoreResult,
     )
     return result.number, result.player, result.numerator, result.denominator
@@ -366,7 +380,7 @@ class OcrPlayerCivResult(BaseModel):
 def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str]]:
     result = ocr_gemini(
         crop=crop,
-        prompt="Extract the player name and civilization name displayed in this image. If present, it will be formatted like 'Player (Civilization)'. For example, 'GL.Hera (Britons)' or 'TAG_MbL_ (Armenians)'. If text is not present in this format, instead return None for each.",
+        prompt="Extract the player name and civilization name displayed in this image. If present, it will be formatted like 'Player (Civilization)'. For example, 'GL.Hera (Britons)' or 'TAG_MbL_ (Armenians)'. Only if no text is present in this format, instead return None for each component.",
         model_class=OcrPlayerCivResult,
     )
     return result.player, result.civilization
