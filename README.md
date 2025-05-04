@@ -1,8 +1,4 @@
-plan:
-
--  [ ] maybe try other plots that might be interesting
-
-## results
+## prelim results
 
 ![](img/villagers-at-age-click.png)
 
