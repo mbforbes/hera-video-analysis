@@ -630,26 +630,18 @@ def analyze_frame(
 def _binary_search_age_click(
     out_dir: str, video_path: str, age: AgeText, start_frame: int, end_frame: int
 ) -> tuple[FrameResult, int]:
-    """Returns (FrameResult, frame number)."""
+    """Searches start_frame - end_frame inclusive as the viable range for the first frame with age
+    `age`. Returns (FrameResult, frame number)."""
     print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
     age_idx = ORDERED_AGE_TEXTS.index(age)
 
     if start_frame > end_frame:
         print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
         sys.exit(1)
-    elif start_frame == end_frame or start_frame + 1 == end_frame:
-        # shockingly, 1 and 2 frame remaining logic the same
-        atr = get_frame_age_text(out_dir, video_path, start_frame)
-        if atr.age == age:
-            return get_frame_result(out_dir, video_path, start_frame), start_frame  # done
-        else:
-            next_atr = get_frame_age_text(out_dir, video_path, start_frame + 1)
-            if next_atr.age != age:
-                print(
-                    f"Error: binary search failed at start_frame={start_frame}, end_frame={end_frame}, start_frame.age = {atr.age}, next frame's age = {next_atr.age}"
-                )
-                sys.exit(1)
-            return get_frame_result(out_dir, video_path, start_frame + 1), start_frame + 1  # done
+    elif start_frame == end_frame:
+        fr = get_frame_result(out_dir, video_path, start_frame)
+        assert fr.age.text == age
+        return fr, start_frame
     else:
         mid_frame = (start_frame + end_frame) // 2  # round down
         atr = get_frame_age_text(out_dir, video_path, mid_frame)
@@ -657,7 +649,7 @@ def _binary_search_age_click(
         # before video starts (i.e., before 'dark age')
         mid_age_idx = -1 if atr.age is None else ORDERED_AGE_TEXTS.index(atr.age)
         if mid_age_idx >= age_idx:
-            return _binary_search_age_click(out_dir, video_path, age, start_frame, mid_frame - 1)
+            return _binary_search_age_click(out_dir, video_path, age, start_frame, mid_frame)
         else:
             return _binary_search_age_click(out_dir, video_path, age, mid_frame + 1, end_frame)
 
