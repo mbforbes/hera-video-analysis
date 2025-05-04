@@ -45,7 +45,7 @@ class Rectangle(BaseModel):
 AgeNumeral = Literal["I", "II", "III", "IV"]
 AgeText = Literal["Dark Age", "Feudal Age", "Castle Age", "Imperial Age"]
 
-ORDERED_AGE_TEXT: list[AgeText] = [
+ORDERED_AGE_TEXTS: list[AgeText] = [
     "Dark Age",
     "Feudal Age",
     "Castle Age",
@@ -121,6 +121,12 @@ class FrameResult(BaseModel):
     top_player: PlayerInfo
     bottom_player: PlayerInfo
     selected_info: SelectedInfo
+
+
+class AgeClickIndex(BaseModel):
+    """Saved to point results of binary search towards FrameResults (on disk)"""
+
+    ageclick2frame: dict[AgeText, int]
 
 
 def display(frame_bgr: cv2.typing.MatLike) -> None:
@@ -319,15 +325,15 @@ def ocr_gemini_pop(crop: np.ndarray) -> tuple[Optional[int], Optional[int]]:
     return result.numerator, result.denominator
 
 
-class OcrAgeResult(BaseModel):
+class OcrAgeTextResult(BaseModel):
     age: Optional[AgeText]
 
 
-def ocr_gemini_age(crop: np.ndarray) -> Optional[AgeText]:
+def ocr_gemini_age_text(crop: np.ndarray) -> Optional[AgeText]:
     result = ocr_gemini(
         crop=crop,
         prompt="Extract the text from this image. It must exactly match one of the four options: Dark Age, Feudal Age, Castle Age, Imperial Age. Pick the closest match. Only if there is no text that matches any option, return None.",
-        model_class=OcrAgeResult,
+        model_class=OcrAgeTextResult,
     )
     return result.age
 
@@ -411,6 +417,8 @@ def ocr_gemini_player_civ(crop: np.ndarray) -> tuple[Optional[str], Optional[str
     return result.player, result.civilization
 
 
+AGE_TEXT_RECT = Rectangle(name="age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age_text)
+
 RECTANGLES: list[Rectangle] = [
     Rectangle(name="wood", x=49, y=17, w=56, h=23, ocr_fn=ocr_gemini_int),
     Rectangle(name="wood_villagers", x=8, y=30, w=40, h=17, ocr_fn=ocr_gemini_int),
@@ -424,7 +432,7 @@ RECTANGLES: list[Rectangle] = [
     Rectangle(name="villagers", x=403, y=29, w=41, h=18, ocr_fn=ocr_gemini_int),
     Rectangle(name="idles", x=526, y=15, w=33, h=27, ocr_fn=ocr_gemini_int),
     Rectangle(name="age_numeral", x=577, y=10, w=33, h=32, ocr_fn=ocr_gemini_age_numeral),
-    Rectangle(name="age_text", x=625, y=14, w=180, h=28, ocr_fn=ocr_gemini_age),
+    AGE_TEXT_RECT,
     Rectangle(name="home", x=828, y=0, w=311, h=37, ocr_fn=ocr_gemini_text),  # Hera
     Rectangle(name="desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
     Rectangle(name="wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
@@ -464,6 +472,7 @@ RECTANGLES: list[Rectangle] = [
 
 
 def get_frame_result(out_dir: str, video_path: str, frame_number: int):
+    """Gets full results (comprehensive OCR)"""
     print("Getting FrameResult for frame", frame_number)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
 
@@ -476,6 +485,58 @@ def get_frame_result(out_dir: str, video_path: str, frame_number: int):
     results = analyze_frame(get_frame(video_path, frame_number))
     write(output_file, results.model_dump_json())
     return results
+
+
+class AgeTextResult(BaseModel):
+    """Somewhat redundant class just so we have a top-level pyandtic type for the cache format."""
+
+    age: Optional[AgeText]
+
+
+def get_frame_age_text(out_dir: str, video_path: str, frame_number: int):
+    """Gets age text only from frame"""
+    print("Getting AgeTextResult for frame", frame_number)
+    output_file = os.path.join(out_dir, f"frame_{frame_number}_agetextresult.json")
+
+    # return age if already found
+    if os.path.exists(output_file):
+        print("Skipping: AgeTextResult exists at", output_file)
+        return AgeTextResult.model_validate_json(read(output_file))
+
+    # else, do OCR on age only and cache result before returning
+    atr = analyze_frame_age_text(get_frame(video_path, frame_number))
+    write(output_file, atr.model_dump_json())
+    return atr
+
+
+def analyze_frame_age_text(
+    frame: cv2.typing.MatLike,
+    display_frame: bool = False,
+    display_crops: bool = False,
+    print_results: bool = True,
+    print_cost: bool = False,
+) -> AgeTextResult:
+    """Extract text from defined regions in a frame and show results."""
+    # Display the full frame first
+    if display_frame:
+        display(frame)
+
+    rect = AGE_TEXT_RECT
+    # Crop the image according to the rectangle
+    crop = frame[rect.y : rect.y + rect.h, rect.x : rect.x + rect.w]
+    if print_results:
+        print("Performing OCR for", rect.name)
+    if display_crops:
+        display(crop)  # , height=(rect.h))
+    detected = rect.ocr_fn(crop)
+    if print_results:
+        print("Detected:", detected)
+        print()
+
+    if print_cost:
+        print(f"Total cost so far: ${RUNNING_COST:.8f}")
+
+    return AgeTextResult(age=detected)
 
 
 def analyze_frame(
@@ -568,34 +629,33 @@ def analyze_frame(
 
 def _binary_search_age_click(
     out_dir: str, video_path: str, age: AgeText, start_frame: int, end_frame: int
-) -> FrameResult:
-    """NOTE: Could speed up & reduce cost dramatically by only doing OCR on age text, then doing
-    full OCR once desired frame found."""
+) -> tuple[FrameResult, int]:
+    """Returns (FrameResult, frame number)."""
     print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
-    age_idx = ORDERED_AGE_TEXT.index(age)
+    age_idx = ORDERED_AGE_TEXTS.index(age)
 
     if start_frame > end_frame:
         print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
         sys.exit(1)
     elif start_frame == end_frame or start_frame + 1 == end_frame:
         # shockingly, 1 and 2 frame remaining logic the same
-        fr = get_frame_result(out_dir, video_path, start_frame)
-        if fr.age.text == age:
-            return fr
+        atr = get_frame_age_text(out_dir, video_path, start_frame)
+        if atr.age == age:
+            return get_frame_result(out_dir, video_path, start_frame), start_frame  # done
         else:
-            next_fr = get_frame_result(out_dir, video_path, start_frame + 1)
-            if next_fr.age.text != age:
+            next_atr = get_frame_age_text(out_dir, video_path, start_frame + 1)
+            if next_atr.age != age:
                 print(
-                    f"Error: binary search failed at start=end={start_frame}, cur frame age = {fr.age.text}, next frame age = {next_fr.age.text}"
+                    f"Error: binary search failed at start_frame={start_frame}, end_frame={end_frame}, start_frame.age = {atr.age}, next frame's age = {next_atr.age}"
                 )
                 sys.exit(1)
-            return next_fr
+            return get_frame_result(out_dir, video_path, start_frame + 1), start_frame + 1  # done
     else:
         mid_frame = (start_frame + end_frame) // 2  # round down
-        fr = get_frame_result(out_dir, video_path, mid_frame)
+        atr = get_frame_age_text(out_dir, video_path, mid_frame)
         # TODO: heuristic should incorporate position in video! right now assuming None for text =
         # before video starts (i.e., before 'dark age')
-        mid_age_idx = -1 if fr.age.text is None else ORDERED_AGE_TEXT.index(fr.age.text)
+        mid_age_idx = -1 if atr.age is None else ORDERED_AGE_TEXTS.index(atr.age)
         if mid_age_idx >= age_idx:
             return _binary_search_age_click(out_dir, video_path, age, start_frame, mid_frame - 1)
         else:
@@ -604,12 +664,6 @@ def _binary_search_age_click(
 
 def binary_search_age_click(out_dir: str, video_path: str, age: AgeText):
     n_frames = get_n_frames(video_path)
-
-    age_index = ORDERED_AGE_TEXT.index(age)
-    if age_index == 0:
-        print("Finding start of first age unsupported")
-        sys.exit(1)
-
     return _binary_search_age_click(out_dir, video_path, age, 0, n_frames - 1)
 
 
@@ -643,10 +697,17 @@ def main():
     if video_info is not None and not os.path.exists(metadata_path):
         write(metadata_path, json.dumps(video_info))
 
-    # Extract a frame at the specified position
-    feudal_click = binary_search_age_click(out_dir, video_path, "Feudal Age")
-    print("Got result for feudal click:")
-    print(feudal_click)
+    aci_path = os.path.join(out_dir, "age_click_index.json")
+    if os.path.exists(aci_path):
+        print(f"Skipping {video_uid} as age clicks already found at", aci_path)
+    else:
+        ageclick2frame: dict[AgeText, int] = {}
+        for age in ORDERED_AGE_TEXTS[1:]:
+            _, frame = binary_search_age_click(out_dir, video_path, age)
+            ageclick2frame[age] = frame
+
+        aci = AgeClickIndex(ageclick2frame=ageclick2frame)
+        write(aci_path, aci.model_dump_json())
 
 
 if __name__ == "__main__":
