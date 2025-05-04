@@ -135,6 +135,12 @@ class AgeStartIndex(BaseModel):
     agestart2frame: dict[AgeNumeral, Optional[int]]
 
 
+class FinalFrameIndex(BaseModel):
+    """Saved to point results of binary search towards FrameResults (on disk)"""
+
+    final_frame_number: int
+
+
 def display(frame_bgr: cv2.typing.MatLike) -> None:
     imgcat(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
 
@@ -735,6 +741,48 @@ def binary_search_age_start(out_dir: str, video_path: str, age_numeral: AgeNumer
     return _binary_search_age_start(out_dir, video_path, age_numeral, 0, n_frames - 1)
 
 
+def _binary_search_final_gameplay_frame(
+    out_dir: str, video_path: str, start_frame: int, end_frame: int
+) -> tuple[FrameResult, int]:
+    """Searches for the final gameplay frame. Returns (FrameResult, frame number).
+    - `out_dir` for caching
+    - `video_path` duh
+    - [`start_frame`, `end_frame`] is the viable range where this frame might exist
+    """
+    print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
+
+    if start_frame > end_frame:
+        print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
+        sys.exit(1)
+    elif start_frame == end_frame:
+        return get_frame_result(out_dir, video_path, start_frame), start_frame
+    elif start_frame + 1 == end_frame:
+        # Needed as [     1      ,   2  ]
+        #            start & mid    end
+        # so [mid, end] would just be [1, 2] again
+        # But feels wrong.
+        atr = get_frame_age_text(out_dir, video_path, end_frame)
+        final_frame = start_frame if atr.age is None else end_frame
+        return get_frame_result(out_dir, video_path, final_frame), final_frame
+    else:
+        mid_frame = (start_frame + end_frame) // 2  # round down
+        atr = get_frame_age_text(out_dir, video_path, mid_frame)
+        # TODO: heuristic should incorporate position in video! right now assuming None for text =
+        # after video ends
+        if atr.age is None:
+            return _binary_search_final_gameplay_frame(
+                out_dir, video_path, start_frame, mid_frame - 1
+            )
+        else:
+            return _binary_search_final_gameplay_frame(out_dir, video_path, mid_frame, end_frame)
+
+
+def binary_search_final_gameplay_frame(out_dir: str, video_path: str):
+    """Returns first frame in video_path with age numeral `age`."""
+    n_frames = get_n_frames(video_path)
+    return _binary_search_final_gameplay_frame(out_dir, video_path, 0, n_frames - 1)
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="AoE2 Frame OCR Development Tool")
@@ -766,17 +814,17 @@ def main():
         write(metadata_path, json.dumps(video_info))
 
     # find clicks
-    asi_path = os.path.join(out_dir, "age_click_index.json")
-    if os.path.exists(asi_path):
-        print(f"Skipping {video_uid} as age clicks already found at", asi_path)
+    aci_path = os.path.join(out_dir, "age_click_index.json")
+    if os.path.exists(aci_path):
+        print(f"Skipping {video_uid} as age clicks already found at", aci_path)
     else:
         ageclick2frame: dict[AgeText, Optional[int]] = {}
         for age_text in ORDERED_AGE_TEXTS[1:]:
-            _, frame = binary_search_age_click(out_dir, video_path, age_text)
-            ageclick2frame[age_text] = frame
+            _, frame_number = binary_search_age_click(out_dir, video_path, age_text)
+            ageclick2frame[age_text] = frame_number
 
         aci = AgeClickIndex(ageclick2frame=ageclick2frame)
-        write(asi_path, aci.model_dump_json())
+        write(aci_path, aci.model_dump_json())
 
     # find first frames of ages
     asi_path = os.path.join(out_dir, "age_start_index.json")
@@ -785,11 +833,20 @@ def main():
     else:
         agestart2frame: dict[AgeNumeral, Optional[int]] = {}
         for age_numeral in ORDERED_AGE_NUMERALS:
-            _, frame = binary_search_age_start(out_dir, video_path, age_numeral)
-            agestart2frame[age_numeral] = frame
+            _, frame_number = binary_search_age_start(out_dir, video_path, age_numeral)
+            agestart2frame[age_numeral] = frame_number
 
-        aci = AgeStartIndex(agestart2frame=agestart2frame)
-        write(asi_path, aci.model_dump_json())
+        asi = AgeStartIndex(agestart2frame=agestart2frame)
+        write(asi_path, asi.model_dump_json())
+
+    # find final frame of game
+    ffi_path = os.path.join(out_dir, "final_frame_index.json")
+    if os.path.exists(ffi_path):
+        print(f"Skipping {video_uid} as final frame already found at", ffi_path)
+    else:
+        _, frame_number = binary_search_final_gameplay_frame(out_dir, video_path)
+        ffi = FinalFrameIndex(final_frame_number=frame_number)
+        write(ffi_path, ffi.model_dump_json())
 
 
 if __name__ == "__main__":
