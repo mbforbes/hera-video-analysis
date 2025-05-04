@@ -6,6 +6,8 @@ plan:
 
 ![](img/villagers-at-age-click.png)
 
+![](img/resources-at-feudal-land.png)
+
 ## data collection on hold indefinitely
 
 Well, ~25 data points isn't awful, but it's not great :-/

@@ -10,6 +10,7 @@ dependencies = [
     "imgcat>=0.6.0",
     "mbforbes-python-utils>=0.5.0",
     "opencv-python>=4.11.0.86",
+    "pandas>=2.2.3",
     "pydantic>=2.11.3",
     "pytesseract>=0.3.13",
     "python-dotenv>=1.1.0",

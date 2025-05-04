@@ -35,9 +35,9 @@ sns.histplot(
 
 ax = plt.gca()
 for bar in ax.patches:
-    if bar.get_height() > 0:
-        x_value = bar.get_x() + bar.get_width() / 2
-        height = bar.get_height()
+    if bar.get_height() > 0:  # type: ignore
+        x_value = bar.get_x() + bar.get_width() / 2  # type: ignore
+        height = bar.get_height()  # type: ignore
         ax.text(
             x_value,  # x position (center of bar)
             height + 0.2,  # y position (slightly above bar)
