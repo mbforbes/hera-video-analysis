@@ -2,6 +2,10 @@ plan:
 
 -  [ ] maybe try other plots that might be interesting
 
+## results
+
+![](img/villagers-at-age-click.png)
+
 ## data collection on hold indefinitely
 
 Well, ~25 data points isn't awful, but it's not great :-/

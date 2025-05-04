@@ -32,6 +32,20 @@ sns.histplot(
     bins=100,
     binrange=(0, 101),
 )
+
+ax = plt.gca()
+for bar in ax.patches:
+    if bar.get_height() > 0:
+        x_value = bar.get_x() + bar.get_width() / 2
+        height = bar.get_height()
+        ax.text(
+            x_value,  # x position (center of bar)
+            height + 0.2,  # y position (slightly above bar)
+            f"{int(x_value)}",  # text (x-value)
+            ha="center",  # horizontal alignment
+            fontsize=8,  # smaller font size to avoid overcrowding
+            # rotation=90,  # vertical text to save space
+        )
 plt.title("Villagers when clicking to next age")
 plt.xlabel("Villagers")
 plt.ylabel("Games")
