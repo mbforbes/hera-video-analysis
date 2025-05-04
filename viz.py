@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from mbforbes_python_utils import read
 import seaborn as sns
 
-from main import AgeClickIndex, FrameResult, AgeText
+from main import AgeClickIndex, AgeText, FrameResultCache
 
 # load data
 output_dir = "./output"
@@ -14,13 +14,14 @@ villager_counts: list[tuple[AgeText, Optional[int]]] = []
 for sd in sds:
     subdir = os.path.join(output_dir, sd)
     aci_path = os.path.join(subdir, "age_click_index.json")
-    if os.path.exists(aci_path):
+    frc_path = os.path.join(subdir, "frame_result_cache.json")
+    if os.path.exists(aci_path) and os.path.exists(frc_path):
         aci = AgeClickIndex.model_validate_json(read(aci_path))
+        frc = FrameResultCache.model_validate_json(read(frc_path))
         for age_text, frame_number in aci.ageclick2frame.items():
             if frame_number is None:
                 continue
-            frame_result_path = os.path.join(subdir, f"frame_{frame_number}_results.json")
-            frame_result = FrameResult.model_validate_json(read(frame_result_path))
+            frame_result = frc.frame2data[frame_number]
             villager_counts.append((age_text, frame_result.villagers.total))
 
 # plot
@@ -31,5 +32,7 @@ sns.histplot(
     bins=100,
     binrange=(0, 101),
 )
+plt.title("Villagers when clicking to next age")
 plt.xlabel("Villagers")
+plt.ylabel("Games")
 plt.show()

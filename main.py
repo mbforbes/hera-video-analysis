@@ -566,10 +566,10 @@ def get_frame_data_cached(
         write(cache_path, CacheModel().model_dump_json(), info_print=False)
     cache = CacheModel.model_validate_json(read(cache_path))
     if frame_number in cache.frame2data:
-        print(f"Cache hit for frame {frame_number} in {cache_path}")
+        # print(f"Cache hit for frame {frame_number} in {cache_path}")
         return cache.frame2data[frame_number]
     else:
-        print(f"Analyzing frame {frame_number}, will write to {cache_path}")
+        # print(f"Analyzing frame {frame_number}, will write to {cache_path}")
         frame_data = frame_analyzer_func(get_frame(video_path, frame_number))
         cache.frame2data[frame_number] = frame_data
         write(cache_path, cache.model_dump_json(), info_print=False)
@@ -639,7 +639,7 @@ def _analyze_frame(
         results[rect.name] = detected
 
     if print_cost:
-        print(f"Total cost so far: ${RUNNING_COST:.8f}")
+        print(f"Total cost this run: ${RUNNING_COST:.8f}")
 
     return results
 
@@ -933,7 +933,8 @@ def main():
             did_process = analyze_video(args.output, videos.videos[index].id)
             if did_process:
                 n_processed += 1
-                print(f"[{n_processed}/{args.n}]")
+                print(f"Total cost this run: ${RUNNING_COST:.8f}")
+                print(f"[{n_processed}/{args.n}]\n\n\n")
             index += 1
 
 
