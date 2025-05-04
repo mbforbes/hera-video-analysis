@@ -13,6 +13,7 @@ from imgcat import imgcat
 from mbforbes_python_utils import read, write
 import numpy as np
 from pydantic import BaseModel
+from tqdm import tqdm
 import yt_dlp
 
 # Create a generic type variable for the Pydantic model
@@ -145,10 +146,50 @@ def display(frame_bgr: cv2.typing.MatLike) -> None:
     imgcat(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
 
 
-def download_video(
+class YoutubeVideo(BaseModel):
+    id: str
+    title: str
+    url: str
+    all_metadata: dict[str, Any]
+
+
+class YoutubeVideoList(BaseModel):
+    videos: list[YoutubeVideo]
+
+
+def get_channel_videos(channel_url: str) -> list[YoutubeVideo]:
+    """Run once"""
+    ydl_opts = {
+        "extract_flat": True,
+        "ignoreerrors": True,
+        "quiet": True,
+    }
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(channel_url, download=False)
+
+        if "entries" in info:  # type: ignore
+            videos = []
+            for video in info["entries"]:  # type: ignore
+                if video.get("_type") == "url" and video.get("ie_key") == "Youtube":  # type: ignore
+                    videos.append(
+                        YoutubeVideo(
+                            id=video.get("id"),  # type: ignore
+                            title=video.get("title"),  # type: ignore
+                            url=f"https://www.youtube.com/watch?v={video.get('id')}",  # type: ignore
+                            all_metadata=video,  # type: ignore
+                        )
+                    )
+            return videos
+        return []
+
+
+def ensure_video_downloaded(
     url: str, output_dir: str = "./videos"
 ) -> tuple[Optional[str], Optional[dict[str, Any]]]:
-    """Download a YouTube video and return its (local path, metadata dict)."""
+    """Download a YouTube video and return its (local path, metadata dict).
+    Skips download if it's already found at the anticipated path.
+    """
     os.makedirs(output_dir, exist_ok=True)
 
     ydl_opts = {
@@ -170,7 +211,9 @@ def download_video(
             for ext in [".mp4", ".webm", ".mkv"]:
                 test_path = base + ext
                 if os.path.exists(test_path):
-                    print(f"Successfully downloaded to {test_path}")
+                    print(f"Resulting destination is {test_path}")
+                    # note: re-fetching info object as simple way to avoid non-serializable
+                    # post-processing objects
                     return test_path, info
 
             print(f"Failed to find downloaded video file for {url}")
@@ -491,17 +534,17 @@ ALL_RECTANGLES: list[Rectangle] = [
 
 def get_frame_result(out_dir: str, video_path: str, frame_number: int):
     """Gets full results (comprehensive OCR)"""
-    print("Getting FrameResult for frame", frame_number)
+    # print("Getting FrameResult for frame", frame_number)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_results.json")
 
     # return results if they already exist
     if os.path.exists(output_file):
-        print("Skipping: Frame results exist at", output_file)
+        # print("Skipping: Frame results exist at", output_file)
         return FrameResult.model_validate_json(read(output_file))
 
     # else, do OCR and cache result before returning
     results = analyze_frame_all(get_frame(video_path, frame_number))
-    write(output_file, results.model_dump_json())
+    write(output_file, results.model_dump_json(), info_print=False)
     return results
 
 
@@ -513,14 +556,14 @@ class AgeTextResult(BaseModel):
 
 def get_frame_age_text(out_dir: str, video_path: str, frame_number: int):
     """Gets age text only from frame"""
-    print("Getting AgeTextResult for frame", frame_number)
+    # print("Getting AgeTextResult for frame", frame_number)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_agetextresult.json")
 
     # return age if already found
     if os.path.exists(output_file):
         # print("Skipping: AgeTextResult exists at", output_file)
         atr = AgeTextResult.model_validate_json(read(output_file))
-        print("Cached:", atr.age)
+        # print("Cached:", atr.age)
         return atr
 
     # else, do OCR on age only and cache result before returning
@@ -537,14 +580,14 @@ class AgeNumeralResult(BaseModel):
 
 def get_frame_age_numeral(out_dir: str, video_path: str, frame_number: int):
     """Gets age text only from frame"""
-    print("Getting AgeNumeralResult for frame", frame_number)
+    # print("Getting AgeNumeralResult for frame", frame_number)
     output_file = os.path.join(out_dir, f"frame_{frame_number}_agenumeralresult.json")
 
     # return age if already found
     if os.path.exists(output_file):
         # print("Skipping: AgeNumeralResult exists at", output_file)
         anr = AgeNumeralResult.model_validate_json(read(output_file))
-        print("Cached:", anr.age)
+        # print("Cached:", anr.age)
         return anr
 
     # else, do OCR on age only and cache result before returning
@@ -559,7 +602,7 @@ def _analyze_frame(
     display_frame: bool = False,
     display_crops: bool = False,
     print_action: bool = False,
-    print_results: bool = True,
+    print_results: bool = False,
     print_cost: bool = False,
 ) -> dict[str, Any]:
     """Extract text from defined regions in a frame and show results."""
@@ -667,7 +710,7 @@ def _binary_search_age_click(
     - [`start_frame`, `end_frame`] is the viable range where this frame might exist
     If not found, returns None, None
     """
-    print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
+    # print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
     age_idx = ORDERED_AGE_TEXTS.index(age_text)
 
     if start_frame > end_frame:
@@ -706,7 +749,7 @@ def _binary_search_age_start(
     - `video_path` duh
     - [`start_frame`, `end_frame`] is the viable range where this frame might exist
     """
-    print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
+    # print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
     age_idx = ORDERED_AGE_NUMERALS.index(age_numeral)
 
     if start_frame > end_frame:
@@ -749,7 +792,7 @@ def _binary_search_final_gameplay_frame(
     - `video_path` duh
     - [`start_frame`, `end_frame`] is the viable range where this frame might exist
     """
-    print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
+    # print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
 
     if start_frame > end_frame:
         print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
@@ -783,43 +826,39 @@ def binary_search_final_gameplay_frame(out_dir: str, video_path: str):
     return _binary_search_final_gameplay_frame(out_dir, video_path, 0, n_frames - 1)
 
 
-def main():
-    # Parse command line arguments
-    parser = argparse.ArgumentParser(description="AoE2 Frame OCR Development Tool")
-    parser.add_argument("--video", required=True, help="YouTube video URL or local video path")
-    # parser.add_argument(
-    #     "--position", type=float, default=0.5, help="Position in video (0.0 to 1.0)"
-    # )
-    parser.add_argument("--output", default="./output", help="Output directory for results")
-    args = parser.parse_args()
+def analyze_video(base_out_dir: str, v: YoutubeVideo):
+    """Returns whether the processing happened (True) or was skipped as already done (False)."""
+    out_dir = os.path.join(base_out_dir, v.id)
+    os.makedirs(out_dir, exist_ok=True)
+    aci_path = os.path.join(out_dir, "age_click_index.json")
+    asi_path = os.path.join(out_dir, "age_start_index.json")
+    ffi_path = os.path.join(out_dir, "final_frame_index.json")
+    if all(os.path.exists(p) for p in [aci_path, asi_path, ffi_path]):
+        print(f"All files found for video ID {v.id}. Skipping.")
+        return False
+    print("Analyzing video", v.id)
 
     # Check if input is a URL or local file
-    video_path = args.video
     video_info = None
-    if args.video.startswith(("http://", "https://", "www.")):
-        # Download the video if it's a URL
-        video_path, video_info = download_video(args.video)
-        if video_path is None:
-            print("Error: Failed to download video. Exiting.")
-            sys.exit(1)
-
-    # Locate out dir
-    video_uid = ".".join(os.path.basename(video_path).split(".")[:1])
-    out_dir = os.path.join(args.output, video_uid)
-    os.makedirs(out_dir, exist_ok=True)
+    video_path, video_info = ensure_video_downloaded(v.url)
+    if video_path is None:
+        print("Error: Failed to download video. Exiting.")
+        sys.exit(1)
 
     # Save metadata if it was retrieved and we don't have it saved.
     metadata_path = os.path.join(out_dir, "metadata.json")
     if video_info is not None and not os.path.exists(metadata_path):
+        # hack to get stripped, clean video info is to "download" it again
+        _, video_info = ensure_video_downloaded(v.url)
         write(metadata_path, json.dumps(video_info))
 
     # find clicks
-    aci_path = os.path.join(out_dir, "age_click_index.json")
     if os.path.exists(aci_path):
-        print(f"Skipping {video_uid} as age clicks already found at", aci_path)
+        print(f"Skipping {v.id} as age clicks already found at", aci_path)
     else:
+        print("Finding frames with age clicks.")
         ageclick2frame: dict[AgeText, Optional[int]] = {}
-        for age_text in ORDERED_AGE_TEXTS[1:]:
+        for age_text in tqdm(ORDERED_AGE_TEXTS[1:]):
             _, frame_number = binary_search_age_click(out_dir, video_path, age_text)
             ageclick2frame[age_text] = frame_number
 
@@ -827,12 +866,12 @@ def main():
         write(aci_path, aci.model_dump_json())
 
     # find first frames of ages
-    asi_path = os.path.join(out_dir, "age_start_index.json")
     if os.path.exists(asi_path):
-        print(f"Skipping {video_uid} as age starts already found at", asi_path)
+        print(f"Skipping {v.id} as age starts already found at", asi_path)
     else:
+        print("Finding frames with age starts.")
         agestart2frame: dict[AgeNumeral, Optional[int]] = {}
-        for age_numeral in ORDERED_AGE_NUMERALS:
+        for age_numeral in tqdm(ORDERED_AGE_NUMERALS):
             _, frame_number = binary_search_age_start(out_dir, video_path, age_numeral)
             agestart2frame[age_numeral] = frame_number
 
@@ -840,13 +879,40 @@ def main():
         write(asi_path, asi.model_dump_json())
 
     # find final frame of game
-    ffi_path = os.path.join(out_dir, "final_frame_index.json")
     if os.path.exists(ffi_path):
-        print(f"Skipping {video_uid} as final frame already found at", ffi_path)
+        print(f"Skipping {v.id} as final frame already found at", ffi_path)
     else:
+        print("Finding final gameplay frame.")
         _, frame_number = binary_search_final_gameplay_frame(out_dir, video_path)
         ffi = FinalFrameIndex(final_frame_number=frame_number)
         write(ffi_path, ffi.model_dump_json())
+
+    os.remove(video_path)
+    return True
+
+
+def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="AoE2 Hera Gameplay Frame OCR Analysis")
+    parser.add_argument("--output", default="./output", help="Output directory for results")
+    parser.add_argument("--n", type=int, required=True, help="How many videos to process")
+    args = parser.parse_args()
+
+    videos = YoutubeVideoList.model_validate_json(read("video_list.json"))
+    n_processed = 0
+    index = 0
+    while n_processed < args.n:
+        did_process = analyze_video(args.output, videos.videos[index])
+        if did_process:
+            n_processed += 1
+            print(f"[{n_processed}/{args.n}]")
+        index += 1
+
+
+def oneoff_make_video_list():
+    """Just run once, then load from file in future."""
+    videos = get_channel_videos("https://www.youtube.com/@Hera-Gameplay")
+    write("video_list.json", YoutubeVideoList(videos=videos).model_dump_json())
 
 
 if __name__ == "__main__":

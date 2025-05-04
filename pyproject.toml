@@ -13,5 +13,6 @@ dependencies = [
     "pydantic>=2.11.3",
     "pytesseract>=0.3.13",
     "python-dotenv>=1.1.0",
+    "tqdm>=4.67.1",
     "yt-dlp>=2025.3.31",
 ]
