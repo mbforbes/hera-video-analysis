@@ -174,9 +174,9 @@ def build_combined_df():
     # Combine all dataframes
     combined_df = pd.concat(dfs, ignore_index=True)
 
-    # Save the combined dataframe to CSV for inspection
-    combined_df.to_csv("combined_frames_data.csv", index=False)
-    logger.info(f"Combined dataframe saved with {len(combined_df)} rows")
+    # Can save the combined dataframe to CSV for inspection
+    # combined_df.to_csv("combined_frames_data.csv", index=False)
+    # logger.info(f"Combined dataframe saved with {len(combined_df)} rows")
 
     return combined_df
 
