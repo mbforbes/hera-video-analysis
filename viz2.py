@@ -11,9 +11,12 @@ import pandas as pd
 import seaborn as sns
 
 from main import ORDERED_AGE_NUMERALS, ORDERED_AGE_TEXTS
+from main import AgeText
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 
@@ -38,7 +41,9 @@ def process_video_directory(video_dir: str) -> pd.DataFrame:
     # Load index files
     age_click_index = load_json_file(os.path.join(video_dir, "age_click_index.json"))
     age_start_index = load_json_file(os.path.join(video_dir, "age_start_index.json"))
-    final_frame_index = load_json_file(os.path.join(video_dir, "final_frame_index.json"))
+    final_frame_index = load_json_file(
+        os.path.join(video_dir, "final_frame_index.json")
+    )
 
     # Load frame results cache
     frame_cache_path = os.path.join(video_dir, "frame_result_cache.json")
@@ -65,7 +70,12 @@ def process_video_directory(video_dir: str) -> pd.DataFrame:
             continue
 
         frame_result = frame_data[str(frame_num)]
-        row = {"video_id": video_id, "frame_num": frame_num, "type": "click", "age": age_text}
+        row = {
+            "video_id": video_id,
+            "frame_num": frame_num,
+            "type": "click",
+            "age": age_text,
+        }
         # Add all frame result data
         row.update(flatten_dict(frame_result, prefix=""))
         rows.append(row)
@@ -89,7 +99,12 @@ def process_video_directory(video_dir: str) -> pd.DataFrame:
         )
 
         frame_result = frame_data[str(frame_num)]
-        row = {"video_id": video_id, "frame_num": frame_num, "type": "start", "age": age_text}
+        row = {
+            "video_id": video_id,
+            "frame_num": frame_num,
+            "type": "start",
+            "age": age_text,
+        }
         # Add all frame result data
         row.update(flatten_dict(frame_result, prefix=""))
         rows.append(row)
@@ -98,7 +113,9 @@ def process_video_directory(video_dir: str) -> pd.DataFrame:
     final_frame = final_frame_index.get("final_frame_number")
     if final_frame is not None:
         if str(final_frame) not in frame_data:
-            logger.error(f"Final frame {final_frame} not found in frame cache for {video_id}")
+            logger.error(
+                f"Final frame {final_frame} not found in frame cache for {video_id}"
+            )
         else:
             frame_result = frame_data[str(final_frame)]
             row = {
@@ -167,12 +184,14 @@ def build_combined_df():
 def _add_x_bar_labels(ax):
     for bar in ax.patches:
         if bar.get_height() > 0:
-            x_value = bar.get_x() + bar.get_width() / 2
+            x_value = int(bar.get_x())
+            x_position = bar.get_x() + bar.get_width() / 2
             height = bar.get_height()
             ax.text(
-                x_value,  # x position (center of bar)
-                height + 0.2,  # y position (slightly above bar)
-                f"{int(x_value)}",  # text (x-value)
+                x_position,  # x position (center of bar)
+                height
+                + (0.1 if x_value % 2 == 0 else 0.5),  # even/odd jitter for no overlap
+                f"{x_value}",  # text (x-value)
                 ha="center",  # horizontal alignment
                 fontsize=8,  # smaller font size to avoid overcrowding
                 # rotation=90,  # vertical text to save space
@@ -186,7 +205,9 @@ def create_villagers_by_age_plot(df: pd.DataFrame):
     """
 
     # Filter to only include click events and relevant ages
-    plot_df = df[(df["type"] == "click") & (df["age"].isin(ORDERED_AGE_TEXTS))]
+    ages = ORDERED_AGE_TEXTS
+    # ages: list[AgeText] = ["Feudal Age"]
+    plot_df = df[(df["type"] == "click") & (df["age"].isin(ages))]
 
     if plot_df.empty:
         logger.warning("No data available for villagers by age plot")
@@ -199,9 +220,10 @@ def create_villagers_by_age_plot(df: pd.DataFrame):
         x="villagers_total",
         hue="age",
         multiple="stack",
-        palette="viridis",
+        palette="Set2",
         # kde=True,
-        bins=150,
+        # bins=150,
+        binwidth=1,
     )
     _add_x_bar_labels(plt.gca())
     plt.title("Villagers when Clicking to Next Age")
@@ -261,7 +283,7 @@ def create_resources_by_age_plots(df: pd.DataFrame):
             x=resource_col,
             hue="age",
             multiple="stack",
-            palette="viridis",
+            palette="Set2",
             binwidth=25,
             kde=True,
             ax=ax,
@@ -288,7 +310,7 @@ def main() -> None:
         logger.error("Combined DF invalid:", combined_df)
         return
 
-    # create_villagers_by_age_plot(combined_df)
+    create_villagers_by_age_plot(combined_df)
     create_resources_by_age_plots(combined_df)
 
 

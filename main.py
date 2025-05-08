@@ -298,13 +298,17 @@ def gemini_cost(
         # NOTE: Other models may use thinking tokens, which are charged differently.
     }
     if usage_metadata is None or model_version is None:
-        raise ValueError("Got None for one of usage, model:", usage_metadata, model_version)
+        raise ValueError(
+            "Got None for one of usage, model:", usage_metadata, model_version
+        )
 
     if model_version not in pricing:
         raise ValueError(f"Pricing for model '{model_version}' not found.")
 
     input_tokens = (
-        usage_metadata.prompt_token_count if usage_metadata.prompt_token_count is not None else 0
+        usage_metadata.prompt_token_count
+        if usage_metadata.prompt_token_count is not None
+        else 0
     )
     output_tokens = (
         usage_metadata.candidates_token_count
@@ -501,7 +505,9 @@ ALL_RECTANGLES: list[Rectangle] = [
     Rectangle(name="desc", x=848, y=39, w=291, h=24, ocr_fn=ocr_gemini_text),  # Ranked
     Rectangle(name="wins", x=1144, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
     Rectangle(name="losses", x=1209, y=0, w=63, h=63, ocr_fn=ocr_gemini_int),
-    Rectangle(name="away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text),  # Opponents
+    Rectangle(
+        name="away", x=1277, y=0, w=306, h=37, ocr_fn=ocr_gemini_text
+    ),  # Opponents
     Rectangle(name="metadate", x=1277, y=39, w=284, h=24, ocr_fn=ocr_gemini_text),
     Rectangle(name="gametime", x=1596, y=54, w=72, h=22, ocr_fn=ocr_gemini_time),
     Rectangle(
@@ -513,7 +519,12 @@ ALL_RECTANGLES: list[Rectangle] = [
         ocr_fn=ocr_gemini_number_player_score,
     ),
     Rectangle(
-        name="top_player_age_numeral", x=1885, y=839, w=26, h=24, ocr_fn=ocr_gemini_age_numeral
+        name="top_player_age_numeral",
+        x=1885,
+        y=839,
+        w=26,
+        h=24,
+        ocr_fn=ocr_gemini_age_numeral,
     ),
     Rectangle(
         name="bottom_number_player_score",
@@ -531,7 +542,14 @@ ALL_RECTANGLES: list[Rectangle] = [
         h=26,
         ocr_fn=ocr_gemini_age_numeral,
     ),
-    Rectangle(name="selected_player_civ", x=599, y=918, w=250, h=26, ocr_fn=ocr_gemini_player_civ),
+    Rectangle(
+        name="selected_player_civ",
+        x=599,
+        y=918,
+        w=250,
+        h=26,
+        ocr_fn=ocr_gemini_player_civ,
+    ),
 ]
 
 
@@ -576,7 +594,9 @@ def get_frame_data_cached(
         return frame_data
 
 
-def get_frame_age_numeral(out_dir: str, video_path: str, frame_number: int) -> Optional[AgeNumeral]:
+def get_frame_age_numeral(
+    out_dir: str, video_path: str, frame_number: int
+) -> Optional[AgeNumeral]:
     return get_frame_data_cached(
         out_dir=out_dir,
         video_path=video_path,
@@ -587,7 +607,9 @@ def get_frame_age_numeral(out_dir: str, video_path: str, frame_number: int) -> O
     )
 
 
-def get_frame_age_text(out_dir: str, video_path: str, frame_number: int) -> Optional[AgeText]:
+def get_frame_age_text(
+    out_dir: str, video_path: str, frame_number: int
+) -> Optional[AgeText]:
     return get_frame_data_cached(
         out_dir=out_dir,
         video_path=video_path,
@@ -727,7 +749,9 @@ def _binary_search_age_click(
     age_idx = ORDERED_AGE_TEXTS.index(age_text)
 
     if start_frame > end_frame:
-        print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
+        print(
+            f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}"
+        )
         sys.exit(1)
     elif start_frame == end_frame:
         fr = get_frame_result(out_dir, video_path, start_frame)
@@ -741,11 +765,17 @@ def _binary_search_age_click(
         mid_age_text = get_frame_age_text(out_dir, video_path, mid_frame)
         # TODO: heuristic should incorporate position in video! right now assuming None for text =
         # before video starts (i.e., before 'dark age')
-        mid_age_idx = -1 if mid_age_text is None else ORDERED_AGE_TEXTS.index(mid_age_text)
+        mid_age_idx = (
+            -1 if mid_age_text is None else ORDERED_AGE_TEXTS.index(mid_age_text)
+        )
         if mid_age_idx >= age_idx:
-            return _binary_search_age_click(out_dir, video_path, age_text, start_frame, mid_frame)
+            return _binary_search_age_click(
+                out_dir, video_path, age_text, start_frame, mid_frame
+            )
         else:
-            return _binary_search_age_click(out_dir, video_path, age_text, mid_frame + 1, end_frame)
+            return _binary_search_age_click(
+                out_dir, video_path, age_text, mid_frame + 1, end_frame
+            )
 
 
 def binary_search_age_click(out_dir: str, video_path: str, age_text: AgeText):
@@ -755,7 +785,11 @@ def binary_search_age_click(out_dir: str, video_path: str, age_text: AgeText):
 
 
 def _binary_search_age_start(
-    out_dir: str, video_path: str, age_numeral: AgeNumeral, start_frame: int, end_frame: int
+    out_dir: str,
+    video_path: str,
+    age_numeral: AgeNumeral,
+    start_frame: int,
+    end_frame: int,
 ) -> tuple[FrameResult, int] | tuple[None, None]:
     """Searches for the first frame with age `age_numeral`. Returns (FrameResult, frame number).
     - `out_dir` for caching
@@ -766,7 +800,9 @@ def _binary_search_age_start(
     age_idx = ORDERED_AGE_NUMERALS.index(age_numeral)
 
     if start_frame > end_frame:
-        print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
+        print(
+            f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}"
+        )
         sys.exit(1)
     elif start_frame == end_frame:
         fr = get_frame_result(out_dir, video_path, start_frame)
@@ -780,7 +816,11 @@ def _binary_search_age_start(
         mid_age_numeral = get_frame_age_numeral(out_dir, video_path, mid_frame)
         # TODO: heuristic should incorporate position in video! right now assuming None for text =
         # before video starts (i.e., before 'dark age')
-        mid_age_idx = -1 if mid_age_numeral is None else ORDERED_AGE_NUMERALS.index(mid_age_numeral)
+        mid_age_idx = (
+            -1
+            if mid_age_numeral is None
+            else ORDERED_AGE_NUMERALS.index(mid_age_numeral)
+        )
         if mid_age_idx >= age_idx:
             return _binary_search_age_start(
                 out_dir, video_path, age_numeral, start_frame, mid_frame
@@ -808,7 +848,9 @@ def _binary_search_final_gameplay_frame(
     # print(f"Considering {start_frame} - {end_frame} ({(end_frame - start_frame) + 1} frames)")
 
     if start_frame > end_frame:
-        print(f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}")
+        print(
+            f"Error: binary search got start_frame={start_frame} > end_frame={end_frame}"
+        )
         sys.exit(1)
     elif start_frame == end_frame:
         return get_frame_result(out_dir, video_path, start_frame), start_frame
@@ -830,7 +872,9 @@ def _binary_search_final_gameplay_frame(
                 out_dir, video_path, start_frame, mid_frame - 1
             )
         else:
-            return _binary_search_final_gameplay_frame(out_dir, video_path, mid_frame, end_frame)
+            return _binary_search_final_gameplay_frame(
+                out_dir, video_path, mid_frame, end_frame
+            )
 
 
 def binary_search_final_gameplay_frame(out_dir: str, video_path: str):
@@ -839,8 +883,16 @@ def binary_search_final_gameplay_frame(out_dir: str, video_path: str):
     return _binary_search_final_gameplay_frame(out_dir, video_path, 0, n_frames - 1)
 
 
+SKIP_LIST: set[str] = {"xRbejzVK_7A"}
+"""Video IDs that don't work for some reason. Maybe revisit."""
+
+
 def analyze_video(base_out_dir: str, video_id: str):
     """Returns whether the processing happened (True) or was skipped as already done (False)."""
+    if video_id in SKIP_LIST:
+        print(f"Video ID {video_id} found in skip list. Skipping.")
+        return False
+
     out_dir = os.path.join(base_out_dir, video_id)
     os.makedirs(out_dir, exist_ok=True)
     aci_path = os.path.join(out_dir, "age_click_index.json")
@@ -910,9 +962,15 @@ def main():
         description="AoE2 Hera Gameplay Frame OCR Analysis",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--output", default="./output", help="Output directory for results")
     parser.add_argument(
-        "--n", type=int, required=False, default=1, help="How many videos to process from the list"
+        "--output", default="./output", help="Output directory for results"
+    )
+    parser.add_argument(
+        "--n",
+        type=int,
+        required=False,
+        default=1,
+        help="How many videos to process from the list",
     )
     parser.add_argument(
         "--video_id",
