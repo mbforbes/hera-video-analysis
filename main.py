@@ -883,7 +883,7 @@ def binary_search_final_gameplay_frame(out_dir: str, video_path: str):
     return _binary_search_final_gameplay_frame(out_dir, video_path, 0, n_frames - 1)
 
 
-SKIP_LIST: set[str] = {"xRbejzVK_7A"}
+SKIP_LIST: set[str] = {"xRbejzVK_7A", "fKZqREMkYWQ"}
 """Video IDs that don't work for some reason. Maybe revisit."""
 
 

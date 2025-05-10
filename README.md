@@ -16,6 +16,14 @@ using recorded game files would be perfect except need game to run them (they're
 
 ![](img/resources-at-feudal-land.png)
 
+## corrupted videos
+
+Sometimes openCV fails to extract the specified frame for a downloaded video. This is somewhat rare. (Ideally the pipeline should be resilient to this.) Upon manual inspection, the video has no audio and becomes more corrupted the further in you seek, e.g.,:
+
+![](img/corrupted-frame.moz90.jpg)
+
+I don't know why this happens. It seems consistent, IIRC---i.e., if re-downloaded, the new video is also corrupted.
+
 ## data collection ~~on hold indefinitely~~ proceeding very slowly for now
 
 Well, ~~25 data points~~ downloading videos slowly over time isn't awful, but it's not great :-/
@@ -24,7 +32,7 @@ Well, ~~25 data points~~ downloading videos slowly over time isn't awful, but it
 
 Things look complicated (getting & passing per-video tokens using multiple plugins), and then still questionable (may not fix it), and risk getting IP banned.
 
-## postmortem
+## ~~post~~midmortem
 
 good weekend project
 

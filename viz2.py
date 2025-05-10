@@ -7,6 +7,7 @@ import json
 import logging
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import seaborn as sns
 
@@ -278,6 +279,8 @@ def create_resources_by_age_plots(df: pd.DataFrame):
             logger.warning(f"No valid data for {resource}")
             continue
 
+        # TODO: 200 seems to fall into the 175-200 range (e.g., stone), when it would seem better if
+        # it feel into the 200-225 range.
         sns.histplot(
             data=resource_df,
             x=resource_col,
